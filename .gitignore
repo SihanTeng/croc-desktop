@@ -1,0 +1,13 @@
+# Binaries / build output
+build/bin/
+/croc-gui
+
+# Test binary, built with `go test -c`
+*.test
+
+# Frontend artifacts
+frontend/node_modules/
+frontend/dist/
+
+# Wails generated bindings
+frontend/wailsjs/

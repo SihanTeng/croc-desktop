@@ -1,0 +1,87 @@
+/* croc GUI design tokens — locked by gui/design.md (theme: Cobalt).
+ * Every colour, font, space, and ease in the app references these names. */
+
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("./assets/fonts/SpaceGrotesk-var.woff2") format("woff2-variations");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("./assets/fonts/Inter-var.woff2") format("woff2-variations");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./assets/fonts/JetBrainsMono-var.woff2") format("woff2-variations");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* colour — cool engineered paper, one electric cobalt signal */
+  --color-paper:      oklch(98.5% 0.004 250);
+  --color-paper-2:    oklch(96.5% 0.005 250);
+  --color-ink:        oklch(24% 0.02 258);
+  --color-ink-2:      oklch(34% 0.018 257);
+  --color-muted:      oklch(52% 0.012 257);
+  --color-rule:       oklch(90% 0.006 250);
+  --color-rule-2:     oklch(84% 0.008 252);
+  --color-accent:     oklch(54% 0.20 256);
+  --color-accent-2:   oklch(49% 0.21 258);
+  --color-accent-ink: oklch(99% 0.003 256);
+  --color-focus:      oklch(54% 0.20 256);
+  --color-graphite:   oklch(22% 0.016 260);
+  --color-graphite-2: oklch(30% 0.014 260);
+  --color-graphite-3: oklch(72% 0.01 258);
+  --color-ok:         oklch(50% 0.17 155);
+  --color-error:      oklch(55% 0.20 25);
+  --color-qr-pad:     oklch(100% 0 0);
+  --shadow-whisper:   0 1px 2px oklch(24% 0.02 258 / 0.08);
+
+  /* type */
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-body:    "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, monospace;
+
+  --text-xs:   0.75rem;
+  --text-sm:   0.875rem;
+  --text-base: 0.9375rem;
+  --text-md:   1.125rem;
+  --text-lg:   1.375rem;
+  --text-xl:   1.75rem;
+
+  /* space — 4pt scale */
+  --space-3xs: 0.125rem;
+  --space-2xs: 0.25rem;
+  --space-xs:  0.5rem;
+  --space-sm:  0.75rem;
+  --space-md:  1rem;
+  --space-lg:  1.5rem;
+  --space-xl:  2.5rem;
+  --space-2xl: 4rem;
+
+  /* motion */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:     cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro:   120ms;
+  --dur-short:   220ms;
+  --dur-long:    420ms;
+
+  /* shape */
+  --radius-control: 6px;
+  --radius-card:    10px;
+
+  /* z scale */
+  --z-base:   1;
+  --z-raised: 10;
+  --z-modal:  400;
+}

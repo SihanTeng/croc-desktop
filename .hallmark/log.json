@@ -1,0 +1,12 @@
+[
+  {
+    "date": "2026-07-24",
+    "macrostructure": "Workbench",
+    "theme": "Cobalt",
+    "enrichment": "none (Tier-B hand-built SVG logo mark)",
+    "nav": "N3 side-rail (left, 14rem, filled-bar indicator)",
+    "footer": "none",
+    "scope": "app",
+    "brief": "croc GUI (Wails desktop app) — logo design + full UI redesign to Cobalt / modern-minimal per gui/design.md"
+  }
+]
