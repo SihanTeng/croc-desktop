@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=croc
+Comment=Easily and securely transfer files between computers
+Exec=croc-gui
+Icon=croc-gui
+Type=Application
+Categories=Network;Utility;
+Terminal=false

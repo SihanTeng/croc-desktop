@@ -101,15 +101,15 @@ func (a *App) StartSendText(text string) (string, error) {
 		return "", err
 	}
 	if _, err = f.WriteString(text); err != nil {
-		f.Close()
-		os.Remove(f.Name())
+		_ = f.Close()
+		_ = os.Remove(f.Name())
 		return "", err
 	}
 	if err = f.Close(); err != nil {
-		os.Remove(f.Name())
+		_ = os.Remove(f.Name())
 		return "", err
 	}
-	cleanup := func() { os.Remove(f.Name()) }
+	cleanup := func() { _ = os.Remove(f.Name()) }
 	code, err := a.startSend([]string{f.Name()}, true, cleanup)
 	if err != nil {
 		cleanup()
@@ -201,7 +201,7 @@ func (a *App) StartReceive(code string, outDir string) error {
 	}
 	go func() {
 		err := cr.Receive()
-		os.Chdir(oldWd)
+		_ = os.Chdir(oldWd)
 		a.tm.finish(err)
 	}()
 	return nil

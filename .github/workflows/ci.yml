@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The GUI builds against a croc with the hooks layer (go.mod replace ../croc).
+# CI clones it next to this repo. Override via repo variables if the fork
+# lives elsewhere.
+env:
+  CROC_REPO: ${{ vars.CROC_REPO || 'SihanTeng/croc' }}
+  CROC_REF: ${{ vars.CROC_REF || 'gui-hooks' }}
+
+jobs:
+  go:
+    name: Go — lint, vet, fmt, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: croc-gui
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CROC_REPO }}
+          ref: ${{ env.CROC_REF }}
+          path: croc
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: croc-gui
+
+      - name: gofmt check
+        working-directory: croc-gui
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+
+      - name: go vet
+        working-directory: croc-gui
+        run: go vet ./...
+
+      - name: go test
+        working-directory: croc-gui
+        run: go test -timeout 300s ./...
+
+  frontend:
+    name: Frontend — format, lint, typecheck, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: prettier
+        working-directory: frontend
+        run: npm run format:check
+
+      - name: eslint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: tsc
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: vite build
+        working-directory: frontend
+        run: npm run build

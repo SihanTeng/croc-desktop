@@ -4,13 +4,7 @@
 
 export function LogoMark({ size = 26 }: { size?: number }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 64 64"
-      fill="currentColor"
-      aria-hidden="true"
-    >
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="currentColor" aria-hidden="true">
       <path
         fillRule="evenodd"
         d="

@@ -1,0 +1,28 @@
+# golangci-lint configuration for croc-gui.
+# Run: golangci-lint run ./...
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck      # unchecked errors
+    - govet         # go vet suspicious constructs
+    - ineffassign   # assignments that are never used
+    - staticcheck   # bugs + performance + style (SA/S/ST checks)
+    - unused        # unused code
+    - misspell      # common misspellings
+    - gofmt         # not gofmt-formatted
+    - goimports     # import grouping/formatting
+    - gosimple      # simplifiable code
+
+issues:
+  # quiet the noisier stylistic checks for this codebase
+  exclude-use-default: false
+  exclude-rules:
+    # tests intentionally keep some unused fields/helpers
+    - path: _test\.go
+      linters:
+        - unused

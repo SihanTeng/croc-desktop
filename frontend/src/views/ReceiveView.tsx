@@ -8,11 +8,7 @@ function errMsg(e: unknown): string {
   return String(e);
 }
 
-export default function ReceiveView({
-  transfer,
-}: {
-  transfer: TransferModel;
-}) {
+export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
   const [code, setCode] = useState("");
   const [outDir, setOutDir] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
@@ -33,6 +29,20 @@ export default function ReceiveView({
       .then(setOutDir)
       .catch(() => {});
   }, []);
+
+  const decodeImage = async (data: string) => {
+    setImgBusy(true);
+    setImgMsg(null);
+    try {
+      const decoded = await Backend.DecodeCodeFromBase64(data);
+      setCode(decoded);
+      setImgMsg({ kind: "ok", text: "Code read from image." });
+    } catch (e) {
+      setImgMsg({ kind: "err", text: errMsg(e) });
+    } finally {
+      setImgBusy(false);
+    }
+  };
 
   // Paste a screenshot of the sender's QR code anywhere in the app — the
   // code is extracted in the background; the image itself is never shown.
@@ -56,20 +66,6 @@ export default function ReceiveView({
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
   }, []);
-
-  const decodeImage = async (data: string) => {
-    setImgBusy(true);
-    setImgMsg(null);
-    try {
-      const decoded = await Backend.DecodeCodeFromBase64(data);
-      setCode(decoded);
-      setImgMsg({ kind: "ok", text: "Code read from image." });
-    } catch (e) {
-      setImgMsg({ kind: "err", text: errMsg(e) });
-    } finally {
-      setImgBusy(false);
-    }
-  };
 
   const chooseImage = async () => {
     setImgMsg(null);
@@ -172,28 +168,18 @@ export default function ReceiveView({
 
       <div className="qr-row">
         <span className="hint">QR screenshot? Paste it (Ctrl+V) or</span>
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={chooseImage}
-          disabled={imgBusy}
-        >
+        <button className="btn btn-ghost btn-sm" onClick={chooseImage} disabled={imgBusy}>
           {imgBusy ? "Reading…" : "Choose image…"}
         </button>
       </div>
       {imgMsg && (
-        <p className={imgMsg.kind === "err" ? "error-text" : "hint qr-hint"}>
-          {imgMsg.text}
-        </p>
+        <p className={imgMsg.kind === "err" ? "error-text" : "hint qr-hint"}>{imgMsg.text}</p>
       )}
 
       <label className="field">
         <span className="field-label">Save to</span>
         <div className="input-row">
-          <input
-            className="input"
-            value={outDir}
-            onChange={(e) => setOutDir(e.target.value)}
-          />
+          <input className="input" value={outDir} onChange={(e) => setOutDir(e.target.value)} />
           <button className="btn btn-ghost" onClick={browse}>
             Browse…
           </button>

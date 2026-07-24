@@ -63,18 +63,14 @@ export function useTransfer(): TransferModel {
       onEvent<ProgressPayload>("transfer:progress", (progress) =>
         setT((p) => ({ ...p, progress, phase: "transferring" }))
       ),
-      onEvent<AcceptPayload>("transfer:accept", (accept) =>
-        setT((p) => ({ ...p, accept }))
-      ),
+      onEvent<AcceptPayload>("transfer:accept", (accept) => setT((p) => ({ ...p, accept }))),
       onEvent<OverwritePayload>("transfer:overwrite", (overwrite) =>
         setT((p) => ({ ...p, overwrite }))
       ),
       onEvent<DonePayload>("transfer:done", (result) =>
         setT((p) => ({ ...p, result, phase: "done", progress: null }))
       ),
-      onEvent<string>("transfer:error", (error) =>
-        setT((p) => ({ ...p, error, phase: "error" }))
-      ),
+      onEvent<string>("transfer:error", (error) => setT((p) => ({ ...p, error, phase: "error" }))),
     ];
     return () => offs.forEach((off) => off());
   }, []);
@@ -82,14 +78,8 @@ export function useTransfer(): TransferModel {
   const begin = useCallback((direction: Direction, code: string) => {
     setT({ ...initial, direction, code, phase: "connecting" });
   }, []);
-  const clearAccept = useCallback(
-    () => setT((p) => ({ ...p, accept: null })),
-    []
-  );
-  const clearOverwrite = useCallback(
-    () => setT((p) => ({ ...p, overwrite: null })),
-    []
-  );
+  const clearAccept = useCallback(() => setT((p) => ({ ...p, accept: null })), []);
+  const clearOverwrite = useCallback(() => setT((p) => ({ ...p, overwrite: null })), []);
   const reset = useCallback(() => setT(initial), []);
 
   return { ...t, begin, clearAccept, clearOverwrite, reset };

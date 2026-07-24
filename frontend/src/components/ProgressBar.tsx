@@ -1,14 +1,8 @@
 import { ProgressPayload, formatBytes } from "../api";
 
-export default function ProgressBar({
-  progress,
-}: {
-  progress: ProgressPayload;
-}) {
+export default function ProgressBar({ progress }: { progress: ProgressPayload }) {
   const pct =
-    progress.bytesTotal > 0
-      ? Math.min(100, (progress.bytesDone / progress.bytesTotal) * 100)
-      : 0;
+    progress.bytesTotal > 0 ? Math.min(100, (progress.bytesDone / progress.bytesTotal) * 100) : 0;
   return (
     <div className="progress-wrap">
       <div className="progress-meta">
@@ -24,8 +18,7 @@ export default function ProgressBar({
         <span>{pct.toFixed(1)}%</span>
         {progress.filesTotal > 1 && (
           <span>
-            file {Math.min(progress.filesDone + 1, progress.filesTotal)} of{" "}
-            {progress.filesTotal}
+            file {Math.min(progress.filesDone + 1, progress.filesTotal)} of {progress.filesTotal}
           </span>
         )}
       </div>

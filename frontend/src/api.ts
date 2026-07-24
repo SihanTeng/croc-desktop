@@ -95,17 +95,10 @@ export interface RelayState {
   error?: string;
 }
 
-export type TransferStateName =
-  | "connecting"
-  | "waiting"
-  | "transferring"
-  | "cancelled";
+export type TransferStateName = "connecting" | "waiting" | "transferring" | "cancelled";
 
 // Subscribe to a backend event; returns an unsubscribe function.
-export function onEvent<T>(
-  name: string,
-  callback: (data: T) => void
-): () => void {
+export function onEvent<T>(name: string, callback: (data: T) => void): () => void {
   if (!window.runtime?.EventsOn) return () => {};
   return window.runtime.EventsOn(name, (data?: any) => callback(data as T));
 }

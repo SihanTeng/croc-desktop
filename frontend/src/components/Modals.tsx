@@ -74,9 +74,7 @@ export function OverwriteModal({
     >
       <p className="modal-sub break-all">{payload.path}</p>
       {isResume && (
-        <p className="modal-sub">
-          {payload.resumePct.toFixed(1)}% is already present locally.
-        </p>
+        <p className="modal-sub">{payload.resumePct.toFixed(1)}% is already present locally.</p>
       )}
     </Modal>
   );

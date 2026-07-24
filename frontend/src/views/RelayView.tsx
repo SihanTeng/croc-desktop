@@ -13,7 +13,9 @@ export default function RelayView() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Backend.GetRelayState().then(setState).catch(() => {});
+    Backend.GetRelayState()
+      .then(setState)
+      .catch(() => {});
     return onEvent<RelayState>("relay:state", (s) => {
       setState(s);
       if (s.error) setError(s.error);
@@ -45,20 +47,13 @@ export default function RelayView() {
       <h2 className="view-title">Relay</h2>
       <div className="card">
         <div className="relay-status">
-          <span
-            className={`dot ${state.running ? "dot-on" : "dot-off"}`}
-          />
-          <span className="status">
-            {state.running ? "Relay running" : "Relay stopped"}
-          </span>
-          {state.running && (
-            <span className="relay-ports">{state.ports?.join(", ")}</span>
-          )}
+          <span className={`dot ${state.running ? "dot-on" : "dot-off"}`} />
+          <span className="status">{state.running ? "Relay running" : "Relay stopped"}</span>
+          {state.running && <span className="relay-ports">{state.ports?.join(", ")}</span>}
         </div>
         {state.running && (
           <p className="hint">
-            Others can use it as relay address{" "}
-            <code>&lt;this-machine-ip&gt;:{firstPort}</code>
+            Others can use it as relay address <code>&lt;this-machine-ip&gt;:{firstPort}</code>
           </p>
         )}
       </div>

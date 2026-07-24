@@ -28,24 +28,20 @@ export default function SendView({ transfer }: { transfer: TransferModel }) {
 
   const addFiles = async () => {
     const picked = await Backend.PickFiles();
-    if (picked?.length)
-      setPaths((p) => Array.from(new Set([...p, ...picked])));
+    if (picked?.length) setPaths((p) => Array.from(new Set([...p, ...picked])));
   };
   const addFolder = async () => {
     const dir = await Backend.PickDirectory();
     if (dir) setPaths((p) => (p.includes(dir) ? p : [...p, dir]));
   };
-  const removePath = (path: string) =>
-    setPaths((p) => p.filter((x) => x !== path));
+  const removePath = (path: string) => setPaths((p) => p.filter((x) => x !== path));
 
   const start = async () => {
     setStartError(null);
     setStarting(true);
     try {
       const code =
-        mode === "files"
-          ? await Backend.StartSend(paths)
-          : await Backend.StartSendText(text);
+        mode === "files" ? await Backend.StartSend(paths) : await Backend.StartSendText(text);
       transfer.begin("send", code);
     } catch (e) {
       setStartError(errMsg(e));
@@ -133,10 +129,7 @@ export default function SendView({ transfer }: { transfer: TransferModel }) {
               {paths.map((p) => (
                 <li key={p}>
                   <span className="file-name break-all">{p}</span>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => removePath(p)}
-                  >
+                  <button className="btn btn-ghost btn-sm" onClick={() => removePath(p)}>
                     ✕
                   </button>
                 </li>
@@ -158,10 +151,7 @@ export default function SendView({ transfer }: { transfer: TransferModel }) {
 
       <button
         className="btn btn-primary btn-lg"
-        disabled={
-          starting ||
-          (mode === "files" ? paths.length === 0 : text.trim() === "")
-        }
+        disabled={starting || (mode === "files" ? paths.length === 0 : text.trim() === "")}
         onClick={start}
       >
         {starting ? "Starting…" : mode === "files" ? "Send files" : "Send text"}
@@ -188,12 +178,8 @@ export function StatusCard({
 
   return (
     <div className="card">
-      {transfer.phase === "connecting" && (
-        <p className="status pulse">Connecting…</p>
-      )}
-      {transfer.phase === "waiting" && (
-        <p className="status pulse">Waiting for recipient…</p>
-      )}
+      {transfer.phase === "connecting" && <p className="status pulse">Connecting…</p>}
+      {transfer.phase === "waiting" && <p className="status pulse">Waiting for recipient…</p>}
       {transfer.phase === "transferring" &&
         (transfer.progress ? (
           <ProgressBar progress={transfer.progress} />
@@ -202,12 +188,8 @@ export function StatusCard({
         ))}
       {transfer.phase === "done" &&
         (doneContent ?? <p className="status status-ok">Transfer complete.</p>)}
-      {transfer.phase === "error" && (
-        <p className="status status-err">{transfer.error}</p>
-      )}
-      {transfer.phase === "cancelled" && (
-        <p className="status">Transfer cancelled.</p>
-      )}
+      {transfer.phase === "error" && <p className="status status-err">{transfer.error}</p>}
+      {transfer.phase === "cancelled" && <p className="status">Transfer cancelled.</p>}
       {cancellable && (
         <div className="btn-row">
           <button className="btn btn-ghost" onClick={onCancel}>

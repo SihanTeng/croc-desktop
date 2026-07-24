@@ -36,9 +36,7 @@ export default function CodeDisplay({ code }: { code: string }) {
           alt="QR code of the receive phrase"
         />
       )}
-      <p className="hint">
-        The recipient enters this code — or scans the QR — on their device.
-      </p>
+      <p className="hint">The recipient enters this code — or scans the QR — on their device.</p>
     </div>
   );
 }

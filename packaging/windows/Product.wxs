@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="croc"
+           Language="1033"
+           Version="1.0.0.0"
+           Manufacturer="croc"
+           UpgradeCode="8fca5e75-eb3b-4dcf-b7cc-c482df60c3fc">
+
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"
+             Description="croc — easily and securely transfer files between computers" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of croc is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="croc.ico" SourceFile="build\appicon.ico" />
+    <Property Id="ARPPRODUCTICON" Value="croc.ico" />
+
+    <Feature Id="MainFeature" Title="croc" Level="1">
+      <ComponentGroupRef Id="CrocFiles" />
+      <ComponentGroupRef Id="CrocShortcuts" />
+    </Feature>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="croc" />
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="CrocMenuDir" Name="croc" />
+      </Directory>
+    </Directory>
+
+    <ComponentGroup Id="CrocFiles" Directory="INSTALLFOLDER">
+      <Component Id="CrocExe" Guid="*">
+        <File Id="crocgui.exe" Source="build\bin\croc-gui.exe" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="CrocShortcuts" Directory="CrocMenuDir">
+      <Component Id="CrocShortcut" Guid="*">
+        <Shortcut Id="CrocStartMenu"
+                  Name="croc"
+                  Description="Transfer files between computers"
+                  Target="[INSTALLFOLDER]croc-gui.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="croc.ico" />
+        <RemoveFile Id="RemoveShortcut" Name="*" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\croc" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Product>
+</Wix>

@@ -158,7 +158,7 @@ func (t *transferManager) finish(err error) {
 		if rerr == nil {
 			payload.IsText = true
 			payload.Text = string(b)
-			os.Remove(textFile)
+			_ = os.Remove(textFile)
 		}
 	}
 	t.emitEvent(eventDone, payload)
