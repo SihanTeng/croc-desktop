@@ -67,13 +67,14 @@ jobs:
           # linuxdeploy only accepts standard icon resolutions (max 512px)
           # and deploys the icon by basename, which must match Icon=croc-gui
           convert build/appicon.png -resize 512x512 /tmp/croc-gui.png
-          ./linuxdeploy.AppImage --appimage-extract-and-run \
+          # linuxdeploy names the AppImage after the desktop file's Name;
+          # OUTPUT pins the final artifact name instead
+          OUTPUT=croc-gui_linux-amd64.AppImage ./linuxdeploy.AppImage --appimage-extract-and-run \
             --appdir AppDir \
             -e AppDir/usr/bin/croc-gui \
             -d packaging/linux/croc-gui.desktop \
             -i /tmp/croc-gui.png \
             --output appimage
-          mv croc-gui-x86_64.AppImage croc-gui_linux-amd64.AppImage
 
       # ---------- macOS: DMG ----------
 
