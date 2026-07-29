@@ -1,57 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { App as Backend, copyToClipboard, formatBytes, ReceivedFile } from "../api";
+import { decodeDataUrlText, maxTextPreview, previewKind } from "../filepreview";
 import { TransferModel } from "../useTransfer";
 import { StatusCard } from "./SendView";
 
 function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
   return String(e);
-}
-
-type PreviewKind = "image" | "video" | "audio" | "text";
-
-const previewExts: Record<string, PreviewKind> = {
-  png: "image",
-  jpg: "image",
-  jpeg: "image",
-  gif: "image",
-  webp: "image",
-  svg: "image",
-  bmp: "image",
-  avif: "image",
-  ico: "image",
-  mp4: "video",
-  webm: "video",
-  mkv: "video",
-  mov: "video",
-  m4v: "video",
-  avi: "video",
-  mp3: "audio",
-  wav: "audio",
-  ogg: "audio",
-  flac: "audio",
-  m4a: "audio",
-  opus: "audio",
-  txt: "text",
-  md: "text",
-  json: "text",
-  log: "text",
-  csv: "text",
-};
-
-// text previews larger than this would bog down the DOM; just list them
-const maxTextPreview = 256 * 1024;
-
-function previewKind(name: string): PreviewKind | null {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  return previewExts[ext] ?? null;
-}
-
-function decodeDataUrlText(dataUrl: string): string {
-  const i = dataUrl.indexOf(",");
-  if (i < 0) return "";
-  const bytes = Uint8Array.from(atob(dataUrl.slice(i + 1)), (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
 }
 
 // ReceivedFileCard shows a received file with a best-effort inline preview

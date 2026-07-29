@@ -248,6 +248,14 @@ func (a *App) CancelTransfer() {
 	a.tm.cancelTransfer()
 }
 
+// IsTransferRunning reports whether a transfer is in progress; used by the
+// E2E harness to wait for the backend to settle between tests.
+func (a *App) IsTransferRunning() bool {
+	a.tm.mu.Lock()
+	defer a.tm.mu.Unlock()
+	return a.tm.running
+}
+
 func (a *App) RespondAccept(accept bool) {
 	a.tm.respondAccept(accept)
 }

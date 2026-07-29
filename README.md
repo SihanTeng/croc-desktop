@@ -94,13 +94,25 @@ wails build      # add -tags webkit2_41 where applicable
 
 ## Test
 
-The backend has headless integration tests that drive the real transfer path
-(`App` methods → `src/croc` → in-process relay) without a window:
+Three layers:
 
-```sh
-npm --prefix frontend install && npm --prefix frontend run build  # frontend/dist for go:embed
-go test .
-```
+- **Backend** (`go test .`): unit tests for settings/history/logger/code
+  parsing plus headless integration tests that drive the real transfer path
+  (`App` methods → `src/croc` → in-process relay) without a window:
+
+  ```sh
+  npm --prefix frontend install && npm --prefix frontend run build  # frontend/dist for go:embed
+  go test .
+  ```
+
+- **Frontend** (`npm --prefix frontend run test`): vitest unit tests for the
+  pure helpers (byte formatting, preview-kind mapping, data-URL decoding).
+
+- **Browser E2E** (`./e2e/run.sh`): playwright drives the real app UI in a
+  browser against throwaway croc peers — send text, receive with preview,
+  decline, Esc cancel, history & logs. Uses the running `wails dev` instance
+  if there is one, otherwise boots a hermetic sandbox (local relay + isolated
+  config). See `e2e/README.md`.
 
 Frontend checks: `npm --prefix frontend run typecheck && npm --prefix frontend run lint`.
 

@@ -25,6 +25,7 @@ declare global {
           ClearHistory(): Promise<void>;
           GetLogs(): Promise<import("./api").LogEntry[]>;
           ClearLogs(): Promise<void>;
+          IsTransferRunning(): Promise<boolean>;
           DecodeCodeFromFile(path: string): Promise<string>;
           DecodeCodeFromBase64(b64: string): Promise<string>;
           PickImage(): Promise<string>;
