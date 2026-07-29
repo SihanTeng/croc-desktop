@@ -19,14 +19,17 @@ jobs:
             name: linux-amd64
             platform: linux/amd64
             bin: croc-gui
+            artifact: croc-gui_linux-amd64.AppImage
           - os: macos-latest
             name: darwin-arm64
             platform: darwin/arm64
             bin: croc-gui
+            artifact: croc-gui_darwin-arm64.dmg
           - os: windows-latest
             name: windows-amd64
             platform: windows/amd64
             bin: croc-gui.exe
+            artifact: croc-gui_windows-amd64.msi
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -108,5 +111,5 @@ jobs:
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: croc-gui_${{ matrix.name }}.*
+          files: ${{ matrix.artifact }}
           fail_on_unmatched_files: true
