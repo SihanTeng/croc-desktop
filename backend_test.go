@@ -104,6 +104,11 @@ func newTestAppWithLocal(disableLocal bool) (*App, *eventLog) {
 	}
 	a := NewApp()
 	a.tm.emit = l.emit
+	// keep test history in memory: NewApp points at the real user's history
+	// file, which tests must not touch
+	hm := newHistoryManager("")
+	a.hm = hm
+	a.tm.history = hm
 	a.settings = Settings{
 		RelayAddress:  "127.0.0.1:" + testRelayPorts[0],
 		RelayPassword: "pass123",
@@ -167,8 +172,19 @@ func TestFileTransfer(t *testing.T) {
 		t.Fatalf("StartReceive: %v", err)
 	}
 
-	waitDone(t, receiverLog, "receive")
+	p := waitDone(t, receiverLog, "receive")
 	waitDone(t, senderLog, "send")
+
+	if len(p.Files) != 1 {
+		t.Fatalf("done payload files: got %d, want 1", len(p.Files))
+	}
+	wantPath := filepath.Join(outDir, "hello.txt")
+	if p.Files[0].Name != "hello.txt" || p.Files[0].Path != wantPath {
+		t.Errorf("done payload file: got %+v, want name=hello.txt path=%s", p.Files[0], wantPath)
+	}
+	if p.Files[0].Size != int64(len(content)) {
+		t.Errorf("done payload size: got %d, want %d", p.Files[0].Size, len(content))
+	}
 
 	got, err := os.ReadFile(filepath.Join(outDir, "hello.txt"))
 	if err != nil {
@@ -182,6 +198,36 @@ func TestFileTransfer(t *testing.T) {
 	}
 	if !receiverLog.saw(eventProgress) {
 		t.Error("receiver never got progress events")
+	}
+
+	recvHist := receiver.GetHistory()
+	if len(recvHist) != 1 {
+		t.Fatalf("receiver history: got %d entries, want 1", len(recvHist))
+	}
+	r := recvHist[0]
+	if r.Direction != "receive" || r.Status != "completed" {
+		t.Errorf("unexpected receiver history entry: %+v", r)
+	}
+	if r.Dir != outDir {
+		t.Errorf("history dir: got %q, want %q", r.Dir, outDir)
+	}
+	if r.TotalFiles != 1 || r.TotalSize != int64(len(content)) {
+		t.Errorf("history totals: got %d files / %d bytes", r.TotalFiles, r.TotalSize)
+	}
+	if len(r.Files) != 1 || r.Files[0].Name != "hello.txt" {
+		t.Errorf("history files: got %+v", r.Files)
+	}
+
+	sendHist := sender.GetHistory()
+	if len(sendHist) != 1 {
+		t.Fatalf("sender history: got %d entries, want 1", len(sendHist))
+	}
+	s := sendHist[0]
+	if s.Direction != "send" || s.Status != "completed" || s.IsText {
+		t.Errorf("unexpected sender history entry: %+v", s)
+	}
+	if len(s.Files) != 1 || s.Files[0].Name != "hello.txt" || s.Files[0].Size != int64(len(content)) {
+		t.Errorf("sender history files: got %+v", s.Files)
 	}
 }
 
@@ -208,6 +254,51 @@ func TestTextTransfer(t *testing.T) {
 	}
 	if p.Text != message {
 		t.Fatalf("text mismatch: got %q, want %q", p.Text, message)
+	}
+	if len(p.Files) != 0 {
+		t.Fatalf("text receive should not list files, got %+v", p.Files)
+	}
+
+	recvHist := receiver.GetHistory()
+	if len(recvHist) != 1 || !recvHist[0].IsText || recvHist[0].Text != message {
+		t.Fatalf("unexpected receiver history: %+v", recvHist)
+	}
+	sendHist := sender.GetHistory()
+	if len(sendHist) != 1 || !sendHist[0].IsText || sendHist[0].Text != message {
+		t.Fatalf("unexpected sender history: %+v", sendHist)
+	}
+}
+
+func TestGetFileDataURL(t *testing.T) {
+	dir := t.TempDir()
+	// 1x1 transparent PNG
+	png := []byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+		0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+		0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x62, 0x00, 0x01, 0x00, 0x00,
+		0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+		0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+	}
+	path := filepath.Join(dir, "pixel.png")
+	if err := os.WriteFile(path, png, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a := NewApp()
+	u, err := a.GetFileDataURL(path)
+	if err != nil {
+		t.Fatalf("GetFileDataURL: %v", err)
+	}
+	if !strings.HasPrefix(u, "data:image/png;base64,") {
+		t.Fatalf("unexpected data URL prefix: %q", u[:min(40, len(u))])
+	}
+
+	if _, err := a.GetFileDataURL(dir); err == nil {
+		t.Fatal("expected an error for a directory")
+	}
+	if _, err := a.GetFileDataURL(filepath.Join(dir, "missing.png")); err == nil {
+		t.Fatal("expected an error for a missing file")
 	}
 }
 
@@ -243,5 +334,15 @@ func TestDeclineTransfer(t *testing.T) {
 		t.Fatal("declined transfer reported as done on sender")
 	case <-time.After(60 * time.Second):
 		t.Fatal("timeout waiting for sender error")
+	}
+
+	recvHist := receiver.GetHistory()
+	if len(recvHist) != 1 || recvHist[0].Status != "cancelled" {
+		t.Fatalf("unexpected receiver history: %+v", recvHist)
+	}
+	sendHist := sender.GetHistory()
+	if len(sendHist) != 1 || sendHist[0].Status != "error" ||
+		sendHist[0].Error != "The recipient declined the transfer" {
+		t.Fatalf("unexpected sender history: %+v", sendHist)
 	}
 }

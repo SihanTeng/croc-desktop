@@ -19,6 +19,9 @@ declare global {
           RespondAccept(accept: boolean): Promise<void>;
           RespondOverwrite(overwrite: boolean): Promise<void>;
           GetQrPng(text: string): Promise<string>;
+          GetFileDataURL(path: string): Promise<string>;
+          GetHistory(): Promise<import("./api").HistoryItem[]>;
+          ClearHistory(): Promise<void>;
           DecodeCodeFromFile(path: string): Promise<string>;
           DecodeCodeFromBase64(b64: string): Promise<string>;
           PickImage(): Promise<string>;

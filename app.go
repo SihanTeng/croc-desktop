@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,15 +22,20 @@ import (
 type App struct {
 	tm *transferManager
 	rm *relayManager
+	hm *historyManager
 
 	settingsMu sync.Mutex
 	settings   Settings
 }
 
 func NewApp() *App {
+	tm := newTransferManager()
+	hm := newHistoryManager(historyPath())
+	tm.history = hm
 	return &App{
-		tm:       newTransferManager(),
+		tm:       tm,
 		rm:       newRelayManager(),
+		hm:       hm,
 		settings: loadSettings(),
 	}
 }
@@ -87,7 +94,7 @@ func (a *App) StartSend(paths []string) (string, error) {
 	if len(paths) == 0 {
 		return "", fmt.Errorf("no files selected")
 	}
-	return a.startSend(paths, false, nil)
+	return a.startSend(paths, "", nil)
 }
 
 // StartSendText sends a text snippet; it is wrapped in a temp file, matching
@@ -110,14 +117,14 @@ func (a *App) StartSendText(text string) (string, error) {
 		return "", err
 	}
 	cleanup := func() { _ = os.Remove(f.Name()) }
-	code, err := a.startSend([]string{f.Name()}, true, cleanup)
+	code, err := a.startSend([]string{f.Name()}, text, cleanup)
 	if err != nil {
 		cleanup()
 	}
 	return code, err
 }
 
-func (a *App) startSend(paths []string, sendingText bool, cleanup func()) (string, error) {
+func (a *App) startSend(paths []string, sendText string, cleanup func()) (string, error) {
 	ctx, err := a.tm.tryStart(true)
 	if err != nil {
 		return "", err
@@ -126,7 +133,7 @@ func (a *App) startSend(paths []string, sendingText bool, cleanup func()) (strin
 	opts := buildCrocOptions(a.settings, true)
 	a.settingsMu.Unlock()
 	opts.SharedSecret = utils.GetRandomName()
-	opts.SendingText = sendingText
+	opts.SendingText = sendText != ""
 
 	filesInfo, emptyFolders, totalFolders, err := croc.GetFilesInfoWithExactExclusions(paths, false, false, nil, nil)
 	if err != nil {
@@ -137,6 +144,16 @@ func (a *App) startSend(paths []string, sendingText bool, cleanup func()) (strin
 		a.tm.reset()
 		return "", fmt.Errorf("nothing to send")
 	}
+	var sendFiles []historyFile
+	var sendTotalSize int64
+	for _, f := range filesInfo {
+		sendTotalSize += f.Size
+		sendFiles = append(sendFiles, historyFile{
+			Name: filepath.Join(f.FolderRemote, f.Name),
+			Size: f.Size,
+		})
+	}
+	a.tm.setSendInfo(sendFiles, len(filesInfo), sendTotalSize, sendText)
 	cr, err := croc.NewCtx(ctx, opts)
 	if err != nil {
 		a.tm.reset()
@@ -226,6 +243,48 @@ func (a *App) GetQrPng(text string) (string, error) {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(png), nil
+}
+
+// maxPreviewBytes caps how much data GetFileDataURL loads into memory and
+// pushes across the bridge; larger files are listed without a preview.
+const maxPreviewBytes = 64 << 20 // 64 MiB
+
+// GetFileDataURL reads a local file and returns it as a data: URL so the
+// frontend can preview received media without a local file server.
+func (a *App) GetFileDataURL(path string) (string, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if st.IsDir() {
+		return "", fmt.Errorf("%s is a directory", path)
+	}
+	if st.Size() > maxPreviewBytes {
+		return "", fmt.Errorf("file is too large to preview")
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	// extension-based types cover markup/media the sniffer can't identify
+	// (e.g. SVG); fall back to sniffing the content otherwise
+	mimeType := mime.TypeByExtension(filepath.Ext(path))
+	if mimeType == "" {
+		mimeType = http.DetectContentType(b)
+	}
+	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(b), nil
+}
+
+// --- history ---
+
+// GetHistory returns the recorded transfer history, newest first.
+func (a *App) GetHistory() []historyItem {
+	return a.hm.list()
+}
+
+// ClearHistory removes all recorded history entries.
+func (a *App) ClearHistory() {
+	a.hm.clear()
 }
 
 // --- settings ---

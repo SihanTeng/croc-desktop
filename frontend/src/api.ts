@@ -71,9 +71,35 @@ export interface ProgressPayload {
   filesTotal: number;
 }
 
+export interface ReceivedFile {
+  name: string;
+  path: string;
+  size: number;
+}
+
 export interface DonePayload {
   isText: boolean;
   text?: string;
+  files?: ReceivedFile[];
+}
+
+export interface HistoryFile {
+  name: string;
+  size: number;
+}
+
+export interface HistoryItem {
+  id: string;
+  time: string;
+  direction: "send" | "receive";
+  status: "completed" | "cancelled" | "error";
+  error?: string;
+  isText?: boolean;
+  text?: string;
+  files?: HistoryFile[];
+  totalFiles?: number;
+  totalSize?: number;
+  dir?: string;
 }
 
 export interface Settings {

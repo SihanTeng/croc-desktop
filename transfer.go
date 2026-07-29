@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/schollz/croc/v10/src/croc"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -42,9 +43,18 @@ type overwritePayload struct {
 	ResumePct float64 `json:"resumePct"`
 }
 
+// receivedFile is a file written to disk by a completed receive; Path is
+// absolute, Name is relative to the receive directory.
+type receivedFile struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+}
+
 type donePayload struct {
-	IsText bool   `json:"isText"`
-	Text   string `json:"text,omitempty"`
+	IsText bool           `json:"isText"`
+	Text   string         `json:"text,omitempty"`
+	Files  []receivedFile `json:"files,omitempty"`
 }
 
 // transferManager runs at most one croc transfer at a time and bridges the
@@ -73,6 +83,14 @@ type transferManager struct {
 
 	lastAccept *acceptPayload
 	receiveDir string
+
+	// history records every transfer outcome; send-side metadata below is
+	// captured at start since the accept payload only exists on the receiver
+	history        *historyManager
+	sendFiles      []historyFile
+	sendTotalFiles int
+	sendTotalSize  int64
+	sendText       string
 }
 
 func newTransferManager() *transferManager {
@@ -106,6 +124,10 @@ func (t *transferManager) tryStart(isSender bool) (context.Context, error) {
 	t.isSender = isSender
 	t.lastAccept = nil
 	t.client = nil
+	t.sendFiles = nil
+	t.sendTotalFiles = 0
+	t.sendTotalSize = 0
+	t.sendText = ""
 	t.ctx, t.cancel = context.WithCancel(context.Background())
 	t.acceptChan = make(chan bool, 1)
 	t.overwriteChan = make(chan bool, 1)
@@ -124,7 +146,8 @@ func (t *transferManager) reset() {
 	}
 }
 
-// finish reports the end of a transfer to the frontend.
+// finish reports the end of a transfer to the frontend and records it in the
+// transfer history.
 func (t *transferManager) finish(err error) {
 	t.mu.Lock()
 	accept := t.lastAccept
@@ -132,36 +155,120 @@ func (t *transferManager) finish(err error) {
 	cancelRequested := t.cancelRequested
 	declined := t.declined
 	isSender := t.isSender
+	sendFiles := t.sendFiles
+	sendTotalFiles := t.sendTotalFiles
+	sendTotalSize := t.sendTotalSize
+	sendText := t.sendText
+	history := t.history
 	t.lastAccept = nil
+	t.sendFiles = nil
+	t.sendTotalFiles = 0
+	t.sendTotalSize = 0
+	t.sendText = ""
 	t.running = false
 	t.cancelRequested = false
 	t.mu.Unlock()
 
+	status := "completed"
+	errMsg := ""
+	var payload donePayload
 	switch {
 	case cancelRequested || declined || errors.Is(err, context.Canceled):
-		t.emitEvent(eventState, "cancelled")
-		return
+		status = "cancelled"
 	case err != nil:
-		msg := err.Error()
-		if isSender && strings.Contains(msg, "refusing files") {
-			msg = "The recipient declined the transfer"
+		status = "error"
+		errMsg = err.Error()
+		if isSender && strings.Contains(errMsg, "refusing files") {
+			errMsg = "The recipient declined the transfer"
 		}
-		t.emitEvent(eventError, msg)
-		return
-	}
-	payload := donePayload{}
-	// for received text, read it back so the UI can show it inline, then
-	// remove the wrapper file (matching the CLI, which doesn't keep it)
-	if accept != nil && accept.IsText && len(accept.Files) > 0 {
-		textFile := filepath.Join(dir, accept.Files[0].Folder, accept.Files[0].Name)
-		b, rerr := os.ReadFile(textFile)
-		if rerr == nil {
-			payload.IsText = true
-			payload.Text = string(b)
-			_ = os.Remove(textFile)
+	default:
+		// for received text, read it back so the UI can show it inline, then
+		// remove the wrapper file (matching the CLI, which doesn't keep it)
+		if accept != nil && accept.IsText && len(accept.Files) > 0 {
+			textFile := filepath.Join(dir, accept.Files[0].Folder, accept.Files[0].Name)
+			b, rerr := os.ReadFile(textFile)
+			if rerr == nil {
+				payload.IsText = true
+				payload.Text = string(b)
+				_ = os.Remove(textFile)
+			}
+		}
+		// include the received files so the UI can display them; text transfers
+		// show the message inline instead
+		if !payload.IsText && accept != nil {
+			for _, f := range accept.Files {
+				payload.Files = append(payload.Files, receivedFile{
+					Name: filepath.Join(f.Folder, f.Name),
+					Path: filepath.Join(dir, f.Folder, f.Name),
+					Size: f.Size,
+				})
+			}
 		}
 	}
-	t.emitEvent(eventDone, payload)
+
+	if history != nil {
+		history.add(buildHistoryItem(isSender, status, errMsg, accept, payload, dir,
+			sendFiles, sendTotalFiles, sendTotalSize, sendText))
+	}
+
+	switch status {
+	case "cancelled":
+		t.emitEvent(eventState, "cancelled")
+	case "error":
+		t.emitEvent(eventError, errMsg)
+	default:
+		t.emitEvent(eventDone, payload)
+	}
+}
+
+// buildHistoryItem assembles the history entry for a finished transfer.
+func buildHistoryItem(isSender bool, status, errMsg string, accept *acceptPayload,
+	payload donePayload, dir string, sendFiles []historyFile, sendTotalFiles int,
+	sendTotalSize int64, sendText string) historyItem {
+	item := historyItem{
+		Time:   time.Now(),
+		Status: status,
+		Error:  errMsg,
+	}
+	if isSender {
+		item.Direction = "send"
+		if sendText != "" {
+			item.IsText = true
+			item.Text = truncateText(sendText, maxHistoryText)
+		} else {
+			item.TotalFiles = sendTotalFiles
+			item.TotalSize = sendTotalSize
+			for i, f := range sendFiles {
+				if i >= maxHistoryFiles {
+					break
+				}
+				item.Files = append(item.Files, f)
+			}
+		}
+		return item
+	}
+	item.Direction = "receive"
+	item.Dir = dir
+	if payload.IsText {
+		item.IsText = true
+		item.Text = truncateText(payload.Text, maxHistoryText)
+		return item
+	}
+	if accept != nil {
+		item.IsText = accept.IsText
+		item.TotalFiles = len(accept.Files)
+		item.TotalSize = accept.TotalSize
+		for i, f := range accept.Files {
+			if i >= maxHistoryFiles {
+				break
+			}
+			item.Files = append(item.Files, historyFile{
+				Name: filepath.Join(f.Folder, f.Name),
+				Size: f.Size,
+			})
+		}
+	}
+	return item
 }
 
 func (t *transferManager) cancelTransfer() {
@@ -185,6 +292,17 @@ func (t *transferManager) setClient(cr *croc.Client) {
 	t.mu.Lock()
 	t.client = cr
 	t.mu.Unlock()
+}
+
+// setSendInfo captures send-side metadata for the history entry; the accept
+// payload that describes the files only exists on the receiver.
+func (t *transferManager) setSendInfo(files []historyFile, totalFiles int, totalSize int64, text string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.sendFiles = files
+	t.sendTotalFiles = totalFiles
+	t.sendTotalSize = totalSize
+	t.sendText = text
 }
 
 func (t *transferManager) respondAccept(ok bool) {
