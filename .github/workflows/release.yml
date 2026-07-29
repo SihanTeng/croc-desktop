@@ -61,13 +61,15 @@ jobs:
         run: |
           mkdir -p AppDir/usr/bin
           cp build/bin/croc-gui AppDir/usr/bin/
+          # linuxdeploy only accepts standard icon resolutions (max 512px)
+          convert build/appicon.png -resize 512x512 build/appicon-512.png
           ./linuxdeploy.AppImage --appimage-extract-and-run \
             --appdir AppDir \
             -e AppDir/usr/bin/croc-gui \
             -d packaging/linux/croc-gui.desktop \
-            -i build/appicon.png \
+            -i build/appicon-512.png \
             --output appimage
-          mv croc-gui-x86_64.AppImage croc-gui_linux_amd64.AppImage
+          mv croc-gui-x86_64.AppImage croc-gui_linux-amd64.AppImage
 
       # ---------- macOS: DMG ----------
 
@@ -78,7 +80,7 @@ jobs:
           codesign --deep --force --sign - croc-gui.app
           mkdir -p dmg
           cp -R croc-gui.app dmg/
-          hdiutil create -volname croc -srcfolder dmg -ov -format UDZO ../../croc-gui_darwin_arm64.dmg
+          hdiutil create -volname croc -srcfolder dmg -ov -format UDZO ../../croc-gui_darwin-arm64.dmg
 
       # ---------- Windows: MSI ----------
 
@@ -90,9 +92,11 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $wix = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin"
+          # the choco package installs the latest v3.x; resolve whatever
+          # version landed rather than hardcoding v3.11
+          $wix = (Get-ChildItem "${env:ProgramFiles(x86)}\WiX Toolset v3*\bin" -Directory | Select-Object -First 1).FullName
           & "$wix\candle.exe" packaging\windows\Product.wxs -out Product.wixobj
-          & "$wix\light.exe" Product.wixobj -ext WixUIExtension -out croc-gui_windows_amd64.msi
+          & "$wix\light.exe" Product.wixobj -ext WixUIExtension -out croc-gui_windows-amd64.msi
 
       # ---------- publish ----------
 
