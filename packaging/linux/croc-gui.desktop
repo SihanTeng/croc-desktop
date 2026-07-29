@@ -6,3 +6,4 @@ Icon=croc-gui
 Type=Application
 Categories=Network;Utility;
 Terminal=false
+StartupWMClass=croc-gui

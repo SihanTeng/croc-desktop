@@ -32,6 +32,10 @@ func main() {
 		OnShutdown:       app.shutdown,
 		Linux: &linux.Options{
 			Icon: appIcon,
+			// the Wayland app_id is derived from the prgname; pinning it makes
+			// the window match croc-gui.desktop (and its icon) regardless of
+			// the binary name, e.g. the wails-dev binary
+			ProgramName: "croc-gui",
 		},
 		Bind: []interface{}{
 			app,
