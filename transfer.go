@@ -180,6 +180,8 @@ func (t *transferManager) finish(err error) {
 		errMsg = err.Error()
 		if isSender && strings.Contains(errMsg, "refusing files") {
 			errMsg = "The recipient declined the transfer"
+		} else {
+			errMsg = friendlyTransferError(errMsg)
 		}
 	default:
 		// for received text, read it back so the UI can show it inline, then
@@ -218,6 +220,24 @@ func (t *transferManager) finish(err error) {
 		t.emitEvent(eventError, errMsg)
 	default:
 		t.emitEvent(eventDone, payload)
+	}
+}
+
+// friendlyTransferError rewrites known croc error strings into actionable
+// messages; unknown errors pass through unchanged.
+func friendlyTransferError(msg string) string {
+	switch {
+	case strings.Contains(msg, "password mismatch"):
+		return "The relay rejected the connection (password mismatch) — check the relay password in Settings"
+	case strings.Contains(msg, "could not secure channel"):
+		return "Couldn't establish a secure channel — double-check the code and try again"
+	case strings.Contains(msg, "found no addresses to connect"),
+		strings.Contains(msg, "could not reconnect to any relay"):
+		return "Couldn't reach the relay — check the relay address in Settings and your network connection"
+	case strings.Contains(msg, "not enough disk space"):
+		return "Not enough disk space to receive the files"
+	default:
+		return msg
 	}
 }
 

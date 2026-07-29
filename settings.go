@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/schollz/croc/v10/src/comm"
 	"github.com/schollz/croc/v10/src/croc"
 	"github.com/schollz/croc/v10/src/models"
 	"github.com/schollz/croc/v10/src/utils"
@@ -24,6 +25,8 @@ type Settings struct {
 	NoCompress    bool   `json:"noCompress"`
 	Overwrite     bool   `json:"overwrite"`
 	DownloadDir   string `json:"downloadDir"`
+	Socks5        string `json:"socks5"`
+	HttpProxy     string `json:"httpProxy"`
 }
 
 var settingsMu sync.Mutex
@@ -77,6 +80,13 @@ func saveSettings(s Settings) error {
 		return err
 	}
 	return os.WriteFile(f, b, 0o644)
+}
+
+// applyProxySettings wires the proxy settings into croc's comm package, which
+// (like the CLI) reads them from package-level variables.
+func applyProxySettings(s Settings) {
+	comm.Socks5Proxy = s.Socks5
+	comm.HttpProxy = s.HttpProxy
 }
 
 // buildCrocOptions maps Settings onto croc.Options, mirroring the CLI wiring

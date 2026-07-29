@@ -17,6 +17,7 @@ export interface TransferModel {
   phase: Phase;
   code: string;
   progress: ProgressPayload | null;
+  lastProgressAt: number | null;
   accept: AcceptPayload | null;
   overwrite: OverwritePayload | null;
   result: DonePayload | null;
@@ -32,6 +33,7 @@ interface TransferData {
   phase: Phase;
   code: string;
   progress: ProgressPayload | null;
+  lastProgressAt: number | null;
   accept: AcceptPayload | null;
   overwrite: OverwritePayload | null;
   result: DonePayload | null;
@@ -43,6 +45,7 @@ const initial: TransferData = {
   phase: "idle",
   code: "",
   progress: null,
+  lastProgressAt: null,
   accept: null,
   overwrite: null,
   result: null,
@@ -61,14 +64,14 @@ export function useTransfer(): TransferModel {
         setT((p) => ({ ...p, phase: state }))
       ),
       onEvent<ProgressPayload>("transfer:progress", (progress) =>
-        setT((p) => ({ ...p, progress, phase: "transferring" }))
+        setT((p) => ({ ...p, progress, lastProgressAt: Date.now(), phase: "transferring" }))
       ),
       onEvent<AcceptPayload>("transfer:accept", (accept) => setT((p) => ({ ...p, accept }))),
       onEvent<OverwritePayload>("transfer:overwrite", (overwrite) =>
         setT((p) => ({ ...p, overwrite }))
       ),
       onEvent<DonePayload>("transfer:done", (result) =>
-        setT((p) => ({ ...p, result, phase: "done", progress: null }))
+        setT((p) => ({ ...p, result, phase: "done", progress: null, lastProgressAt: null }))
       ),
       onEvent<string>("transfer:error", (error) => setT((p) => ({ ...p, error, phase: "error" }))),
     ];

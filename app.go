@@ -131,6 +131,7 @@ func (a *App) startSend(paths []string, sendText string, cleanup func()) (string
 	}
 	a.settingsMu.Lock()
 	opts := buildCrocOptions(a.settings, true)
+	applyProxySettings(a.settings)
 	a.settingsMu.Unlock()
 	opts.SharedSecret = utils.GetRandomName()
 	opts.SendingText = sendText != ""
@@ -198,6 +199,7 @@ func (a *App) StartReceive(code string, outDir string) error {
 	}
 	a.settingsMu.Lock()
 	opts := buildCrocOptions(a.settings, false)
+	applyProxySettings(a.settings)
 	a.settingsMu.Unlock()
 	opts.SharedSecret = code
 

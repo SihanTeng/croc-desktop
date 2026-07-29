@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { App as Backend } from "./api";
 import { useTransfer } from "./useTransfer";
 import SendView from "./views/SendView";
@@ -22,6 +22,22 @@ const tabs: { id: Tab; label: string }[] = [
 export default function App() {
   const [tab, setTab] = useState<Tab>("send");
   const transfer = useTransfer();
+
+  // Esc cancels an in-flight transfer from anywhere in the app
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (
+        e.key === "Escape" &&
+        (transfer.phase === "connecting" ||
+          transfer.phase === "waiting" ||
+          transfer.phase === "transferring")
+      ) {
+        Backend.CancelTransfer();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [transfer.phase]);
 
   return (
     <div className="app">

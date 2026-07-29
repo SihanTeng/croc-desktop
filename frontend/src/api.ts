@@ -21,6 +21,8 @@ const previewStub: Partial<WailsApp> = {
       noCompress: false,
       overwrite: false,
       downloadDir: "",
+      socks5: "",
+      httpProxy: "",
     }),
   GetDefaultDownloadDir: () => Promise.resolve(""),
   GetRelayState: () => Promise.resolve({ running: false }),
@@ -113,6 +115,8 @@ export interface Settings {
   noCompress: boolean;
   overwrite: boolean;
   downloadDir: string;
+  socks5: string;
+  httpProxy: string;
 }
 
 export interface RelayState {

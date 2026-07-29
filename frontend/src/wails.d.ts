@@ -15,6 +15,7 @@ declare global {
           StartSend(paths: string[]): Promise<string>;
           StartSendText(text: string): Promise<string>;
           StartReceive(code: string, outDir: string): Promise<void>;
+          NormalizeCode(input: string): Promise<string>;
           CancelTransfer(): Promise<void>;
           RespondAccept(accept: boolean): Promise<void>;
           RespondOverwrite(overwrite: boolean): Promise<void>;

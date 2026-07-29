@@ -66,9 +66,16 @@ export default function SendView({ transfer }: { transfer: TransferModel }) {
         {(transfer.phase === "done" ||
           transfer.phase === "error" ||
           transfer.phase === "cancelled") && (
-          <button className="btn btn-primary" onClick={startOver}>
-            Send another
-          </button>
+          <div className="btn-row">
+            <button className="btn btn-primary" onClick={startOver}>
+              Send another
+            </button>
+            {transfer.phase === "done" && (
+              <button className="btn btn-ghost" disabled={starting} onClick={start}>
+                Send same {mode === "files" ? "files" : "text"} again
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
@@ -143,6 +150,7 @@ export default function SendView({ transfer }: { transfer: TransferModel }) {
           placeholder="Type the text to send…"
           value={text}
           onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.ctrlKey || e.metaKey) && text.trim() && start()}
           rows={6}
         />
       )}
@@ -176,16 +184,48 @@ export function StatusCard({
     transfer.phase === "waiting" ||
     transfer.phase === "transferring";
 
+  // re-evaluate the stall hint periodically; the interval callback (not
+  // render) is where Date.now() may be read
+  const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    if (transfer.phase !== "transferring" || transfer.lastProgressAt === null) return;
+    const at = transfer.lastProgressAt;
+    const t = setInterval(() => setStalled(Date.now() - at > 15000), 5000);
+    return () => clearInterval(t);
+  }, [transfer.phase, transfer.lastProgressAt]);
+
+  const verifying =
+    transfer.phase === "transferring" &&
+    transfer.progress !== null &&
+    transfer.progress.bytesTotal > 0 &&
+    transfer.progress.bytesDone >= transfer.progress.bytesTotal;
+
   return (
     <div className="card">
       {transfer.phase === "connecting" && <p className="status pulse">Connecting…</p>}
-      {transfer.phase === "waiting" && <p className="status pulse">Waiting for recipient…</p>}
+      {transfer.phase === "waiting" && (
+        <p className="status pulse">
+          {transfer.direction === "send"
+            ? "Waiting for recipient — share the code"
+            : "Waiting for the sender…"}
+        </p>
+      )}
       {transfer.phase === "transferring" &&
         (transfer.progress ? (
-          <ProgressBar progress={transfer.progress} />
+          <>
+            <ProgressBar progress={transfer.progress} />
+            {verifying && <p className="status pulse">Verifying…</p>}
+          </>
         ) : (
           <p className="status pulse">Transferring…</p>
         ))}
+      {transfer.phase === "transferring" && stalled && (
+        <p className="hint">
+          {verifying
+            ? "Still working — verifying data…"
+            : "Still working — large files can take a moment."}
+        </p>
+      )}
       {transfer.phase === "done" &&
         (doneContent ?? <p className="status status-ok">Transfer complete.</p>)}
       {transfer.phase === "error" && <p className="status status-err">{transfer.error}</p>}

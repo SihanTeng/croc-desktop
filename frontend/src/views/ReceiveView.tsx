@@ -178,7 +178,11 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
     setStartError(null);
     setStarting(true);
     try {
-      await Backend.StartReceive(code.trim(), outDir);
+      // accept anything pasteable: bare code, "croc <code>", "CROC_SECRET=…",
+      // or a share link carrying the code
+      const normalized = await Backend.NormalizeCode(code);
+      if (normalized !== code.trim()) setCode(normalized);
+      await Backend.StartReceive(normalized, outDir);
       transfer.begin("receive", "");
     } catch (e) {
       setStartError(errMsg(e));
@@ -249,7 +253,7 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
         <span className="field-label">Code phrase</span>
         <input
           className="input code-input"
-          placeholder="e.g. 4-word-code-phrase"
+          placeholder="Code, croc command, or link"
           value={code}
           onChange={(e) => setCode(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && code.trim() && start()}

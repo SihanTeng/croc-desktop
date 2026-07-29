@@ -79,6 +79,24 @@ export default function SettingsView() {
           </div>
         </label>
         <label className="field">
+          <span className="field-label">SOCKS5 proxy</span>
+          <input
+            className="input"
+            placeholder="user:pass@host:port (optional)"
+            value={s.socks5}
+            onChange={(e) => update("socks5", e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span className="field-label">HTTP proxy</span>
+          <input
+            className="input"
+            placeholder="user:pass@host:port (optional)"
+            value={s.httpProxy}
+            onChange={(e) => update("httpProxy", e.target.value)}
+          />
+        </label>
+        <label className="field">
           <span className="field-label">Encryption curve</span>
           <select
             className="input"
