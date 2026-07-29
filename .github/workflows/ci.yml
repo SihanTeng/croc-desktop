@@ -5,27 +5,12 @@ on:
     branches: [main]
   pull_request:
 
-# The GUI builds against a croc with the hooks layer (go.mod replace ../croc).
-# CI clones it next to this repo. Override via repo variables if the fork
-# lives elsewhere.
-env:
-  CROC_REPO: ${{ vars.CROC_REPO || 'SihanTeng/croc' }}
-  CROC_REF: ${{ vars.CROC_REF || 'gui-hooks' }}
-
 jobs:
   go:
     name: Go — lint, vet, fmt, test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: croc-gui
-
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ env.CROC_REPO }}
-          ref: ${{ env.CROC_REF }}
-          path: croc
 
       - uses: actions/setup-go@v5
         with:
@@ -35,15 +20,14 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: croc-gui/frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       # frontend/dist is embedded by the Go module (go:embed all:frontend/dist)
       - name: Build frontend
-        working-directory: croc-gui/frontend
+        working-directory: frontend
         run: npm ci && npm run build
 
       - name: golangci-lint
-        working-directory: croc-gui
         # built from source with the runner's Go so its language version
         # always matches go.mod (prebuilt binaries lag behind)
         run: |
@@ -51,15 +35,12 @@ jobs:
           golangci-lint run ./...
 
       - name: gofmt check
-        working-directory: croc-gui
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
 
       - name: go vet
-        working-directory: croc-gui
         run: go vet ./...
 
       - name: go test
-        working-directory: croc-gui
         run: go test -timeout 300s ./...
 
   frontend:

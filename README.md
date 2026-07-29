@@ -65,8 +65,16 @@ go test .
 - `relay.go` wraps `tcp.RunCtx` for in-app relays.
 - Settings persist to `<croc config dir>/croc-gui.json`.
 
-This is a separate Go module (`replace github.com/schollz/croc/v10 => ../croc`)
-so the CLI's dependency set stays untouched.
+This is a separate Go module so the CLI's dependency set stays untouched.
+croc is consumed as a plain module dependency — no sibling checkout needed:
+
+```
+replace github.com/schollz/croc/v10 => github.com/SihanTeng/croc/v10 v10.0.0-...-51660d6d7730
+```
+
+The replace points at the `gui-hooks` branch of the `SihanTeng/croc` fork,
+which carries the hooks layer (`src/croc/hooks.go`) this app needs. Once the
+hooks land upstream in `schollz/croc`, the `replace` line can be deleted.
 
 ## CI & releases
 
@@ -81,18 +89,11 @@ GitHub Actions workflows live in `.github/workflows/`:
   - Windows: `croc-gui_windows_amd64.msi` (WiX, see `packaging/windows/`)
   and attaches them to the GitHub Release for the tag.
 
-> [!IMPORTANT]
-> **The workflows need a croc with the hooks layer.** `go.mod` uses
-> `replace github.com/schollz/croc/v10 => ../croc`, so CI clones a croc fork
-> next to this repo — by default `SihanTeng/croc` at branch `gui-hooks`
-> (override via the `CROC_REPO` / `CROC_REF` repository variables). Push the
-> hooks changes there once:
+> [!NOTE]
+> When the hooks change, push the croc repo's `main` to the fork branch and
+> refresh the pinned pseudo-version here:
 >
 > ```sh
-> cd croc            # the checkout with src/croc/hooks.go
-> git remote add fork git@github.com:SihanTeng/croc.git
-> git push fork main:gui-hooks
+> cd croc && git push origin main:gui-hooks
+> cd ../croc-gui && go get github.com/SihanTeng/croc/v10@gui-hooks && go mod tidy
 > ```
->
-> Until the hooks land upstream (`schollz/croc`), releases depend on that
-> branch existing.

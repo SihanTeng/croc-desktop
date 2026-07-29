@@ -57,4 +57,4 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )
 
-replace github.com/schollz/croc/v10 => ../croc
+replace github.com/schollz/croc/v10 => github.com/SihanTeng/croc/v10 v10.0.0-20260724092656-51660d6d7730

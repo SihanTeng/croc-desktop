@@ -7,11 +7,6 @@ on:
 permissions:
   contents: write
 
-# See ci.yml — the GUI builds against a croc with the hooks layer.
-env:
-  CROC_REPO: ${{ vars.CROC_REPO || 'SihanTeng/croc' }}
-  CROC_REF: ${{ vars.CROC_REF || 'gui-hooks' }}
-
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -31,14 +26,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: croc-gui
-
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ env.CROC_REPO }}
-          ref: ${{ env.CROC_REF }}
-          path: croc
 
       - uses: actions/setup-go@v5
         with:
@@ -48,7 +35,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: croc-gui/frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
@@ -58,7 +45,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
 
       - name: Build
-        working-directory: croc-gui
         run: wails build -platform ${{ matrix.platform }} -tags webkit2_41 -o croc-gui
 
       # ---------- Linux: AppImage ----------
@@ -73,12 +59,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p AppDir/usr/bin
-          cp croc-gui/build/bin/croc-gui AppDir/usr/bin/
+          cp build/bin/croc-gui AppDir/usr/bin/
           ./linuxdeploy.AppImage --appimage-extract-and-run \
             --appdir AppDir \
             -e AppDir/usr/bin/croc-gui \
-            -d croc-gui/packaging/linux/croc-gui.desktop \
-            -i croc-gui/build/appicon.png \
+            -d packaging/linux/croc-gui.desktop \
+            -i build/appicon.png \
             --output appimage
           mv croc-gui-x86_64.AppImage croc-gui_linux_amd64.AppImage
 
@@ -87,11 +73,11 @@ jobs:
       - name: Ad-hoc sign and package DMG
         if: runner.os == 'macOS'
         run: |
-          cd croc-gui/build/bin
+          cd build/bin
           codesign --deep --force --sign - croc-gui.app
           mkdir -p dmg
           cp -R croc-gui.app dmg/
-          hdiutil create -volname croc -srcfolder dmg -ov -format UDZO ../../../croc-gui_darwin_arm64.dmg
+          hdiutil create -volname croc -srcfolder dmg -ov -format UDZO ../../croc-gui_darwin_arm64.dmg
 
       # ---------- Windows: MSI ----------
 
@@ -102,11 +88,10 @@ jobs:
       - name: Package MSI
         if: runner.os == 'Windows'
         shell: pwsh
-        working-directory: croc-gui
         run: |
           $wix = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin"
           & "$wix\candle.exe" packaging\windows\Product.wxs -out Product.wixobj
-          & "$wix\light.exe" Product.wixobj -ext WixUIExtension -out ..\croc-gui_windows_amd64.msi
+          & "$wix\light.exe" Product.wixobj -ext WixUIExtension -out croc-gui_windows_amd64.msi
 
       # ---------- publish ----------
 
