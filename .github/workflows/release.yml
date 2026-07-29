@@ -19,17 +19,17 @@ jobs:
             name: linux-amd64
             platform: linux/amd64
             bin: croc-gui
-            artifact: croc-gui_linux-amd64.AppImage
+            artifact: croc-gui_${{ github.ref_name }}_linux-amd64.AppImage
           - os: macos-latest
             name: darwin-arm64
             platform: darwin/arm64
             bin: croc-gui
-            artifact: croc-gui_darwin-arm64.dmg
+            artifact: croc-gui_${{ github.ref_name }}_darwin-arm64.dmg
           - os: windows-latest
             name: windows-amd64
             platform: windows/amd64
             bin: croc-gui.exe
-            artifact: croc-gui_windows-amd64.msi
+            artifact: croc-gui_${{ github.ref_name }}_windows-amd64.msi
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +72,7 @@ jobs:
           convert build/appicon.png -resize 512x512 /tmp/croc-gui.png
           # linuxdeploy names the AppImage after the desktop file's Name;
           # OUTPUT pins the final artifact name instead
-          OUTPUT=croc-gui_linux-amd64.AppImage ./linuxdeploy.AppImage --appimage-extract-and-run \
+          OUTPUT=${{ matrix.artifact }} ./linuxdeploy.AppImage --appimage-extract-and-run \
             --appdir AppDir \
             -e AppDir/usr/bin/croc-gui \
             -d packaging/linux/croc-gui.desktop \
@@ -88,7 +88,7 @@ jobs:
           codesign --deep --force --sign - croc-gui.app
           mkdir -p dmg
           cp -R croc-gui.app dmg/
-          hdiutil create -volname croc -srcfolder dmg -ov -format UDZO ../../croc-gui_darwin-arm64.dmg
+          hdiutil create -volname croc -srcfolder dmg -ov -format UDZO ../../${{ matrix.artifact }}
 
       # ---------- Windows: MSI ----------
 
@@ -104,7 +104,7 @@ jobs:
           # version landed rather than hardcoding v3.11
           $wix = (Get-ChildItem "${env:ProgramFiles(x86)}\WiX Toolset v3*\bin" -Directory | Select-Object -First 1).FullName
           & "$wix\candle.exe" packaging\windows\Product.wxs -out Product.wixobj
-          & "$wix\light.exe" Product.wixobj -ext WixUIExtension -sice:ICE64 -out croc-gui_windows-amd64.msi
+          & "$wix\light.exe" Product.wixobj -ext WixUIExtension -sice:ICE64 -out ${{ matrix.artifact }}
 
       # ---------- publish ----------
 
@@ -113,3 +113,12 @@ jobs:
         with:
           files: ${{ matrix.artifact }}
           fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            ## Downloads
+
+            | Platform | File |
+            | --- | --- |
+            | Linux (AppImage) | `croc-gui_${{ github.ref_name }}_linux-amd64.AppImage` |
+            | macOS (Apple Silicon) | `croc-gui_${{ github.ref_name }}_darwin-arm64.dmg` |
+            | Windows (MSI) | `croc-gui_${{ github.ref_name }}_windows-amd64.msi` |
