@@ -46,6 +46,7 @@ func TestFriendlyTransferError(t *testing.T) {
 		{"handshake failed: could not secure channel", "Couldn't establish a secure channel — double-check the code and try again"},
 		{"could not reconnect to any relay: croc.example.com", "Couldn't reach the relay — check the relay address in Settings and your network connection"},
 		{"found no addresses to connect", "Couldn't reach the relay — check the relay address in Settings and your network connection"},
+		{"could not connect to 10.0.0.1:9009: got bad response: room full", "That code is already in use on the relay — wait a moment or pick a different code"},
 		{"write failed: not enough disk space", "Not enough disk space to receive the files"},
 		{"some other error", "some other error"},
 	}

@@ -23,6 +23,8 @@ declare global {
           GetFileDataURL(path: string): Promise<string>;
           GetHistory(): Promise<import("./api").HistoryItem[]>;
           ClearHistory(): Promise<void>;
+          GetLogs(): Promise<import("./api").LogEntry[]>;
+          ClearLogs(): Promise<void>;
           DecodeCodeFromFile(path: string): Promise<string>;
           DecodeCodeFromBase64(b64: string): Promise<string>;
           PickImage(): Promise<string>;

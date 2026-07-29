@@ -87,6 +87,7 @@ type transferManager struct {
 	// history records every transfer outcome; send-side metadata below is
 	// captured at start since the accept payload only exists on the receiver
 	history        *historyManager
+	logger         *logManager
 	sendFiles      []historyFile
 	sendTotalFiles int
 	sendTotalSize  int64
@@ -131,6 +132,13 @@ func (t *transferManager) tryStart(isSender bool) (context.Context, error) {
 	t.ctx, t.cancel = context.WithCancel(context.Background())
 	t.acceptChan = make(chan bool, 1)
 	t.overwriteChan = make(chan bool, 1)
+	if t.logger != nil {
+		dir := "receive"
+		if isSender {
+			dir = "send"
+		}
+		t.logger.log(levelDebug, "transfer", "transfer started (%s)", dir)
+	}
 	return t.ctx, nil
 }
 
@@ -215,10 +223,19 @@ func (t *transferManager) finish(err error) {
 
 	switch status {
 	case "cancelled":
+		if t.logger != nil {
+			t.logger.log(levelWarn, "transfer", "transfer cancelled")
+		}
 		t.emitEvent(eventState, "cancelled")
 	case "error":
+		if t.logger != nil {
+			t.logger.log(levelError, "transfer", "transfer failed: %s", errMsg)
+		}
 		t.emitEvent(eventError, errMsg)
 	default:
+		if t.logger != nil {
+			t.logger.log(levelInfo, "transfer", "transfer complete")
+		}
 		t.emitEvent(eventDone, payload)
 	}
 }
@@ -234,6 +251,8 @@ func friendlyTransferError(msg string) string {
 	case strings.Contains(msg, "found no addresses to connect"),
 		strings.Contains(msg, "could not reconnect to any relay"):
 		return "Couldn't reach the relay — check the relay address in Settings and your network connection"
+	case strings.Contains(msg, "room full"):
+		return "That code is already in use on the relay — wait a moment or pick a different code"
 	case strings.Contains(msg, "not enough disk space"):
 		return "Not enough disk space to receive the files"
 	default:
@@ -332,6 +351,13 @@ func (t *transferManager) respondAccept(ok bool) {
 	}
 	ch := t.acceptChan
 	t.mu.Unlock()
+	if t.logger != nil {
+		if ok {
+			t.logger.log(levelInfo, "transfer", "transfer accepted")
+		} else {
+			t.logger.log(levelWarn, "transfer", "transfer declined")
+		}
+	}
 	if ch == nil {
 		return
 	}
@@ -345,6 +371,13 @@ func (t *transferManager) respondOverwrite(ok bool) {
 	t.mu.Lock()
 	ch := t.overwriteChan
 	t.mu.Unlock()
+	if t.logger != nil {
+		if ok {
+			t.logger.log(levelInfo, "transfer", "overwrite accepted")
+		} else {
+			t.logger.log(levelInfo, "transfer", "overwrite declined (skip)")
+		}
+	}
 	if ch == nil {
 		return
 	}
@@ -368,6 +401,9 @@ func (t *transferManager) hooks() *croc.Hooks {
 			t.emitEvent(eventProgress, p)
 		},
 		OnStateChange: func(state string) {
+			if t.logger != nil {
+				t.logger.log(levelDebug, "transfer", "state → %s", state)
+			}
 			t.emitEvent(eventState, state)
 		},
 		OnAcceptRequest: func(req croc.AcceptRequest) bool {
@@ -389,6 +425,13 @@ func (t *transferManager) hooks() *croc.Hooks {
 			ch := t.acceptChan
 			ctx := t.ctx
 			t.mu.Unlock()
+			if t.logger != nil {
+				what := fmt.Sprintf("%d file(s), %s", len(payload.Files), humanBytes(payload.TotalSize))
+				if payload.IsText {
+					what = "a text message"
+				}
+				t.logger.log(levelInfo, "transfer", "incoming transfer: %s", what)
+			}
 			t.emitEvent(eventAccept, payload)
 			select {
 			case ok := <-ch:
@@ -402,6 +445,9 @@ func (t *transferManager) hooks() *croc.Hooks {
 			ch := t.overwriteChan
 			ctx := t.ctx
 			t.mu.Unlock()
+			if t.logger != nil {
+				t.logger.log(levelInfo, "transfer", "overwrite prompt for %s (%.0f%% already present)", path, resumePct)
+			}
 			t.emitEvent(eventOverwrite, overwritePayload{
 				Path:      path,
 				ResumePct: resumePct,
@@ -416,4 +462,18 @@ func (t *transferManager) hooks() *croc.Hooks {
 		// the GUI user explicitly initiated the send, so no extra confirmation
 		OnConfirmSendToPeer: func(machineID string) bool { return true },
 	}
+}
+
+// humanBytes formats a byte count compactly for log messages.
+func humanBytes(n int64) string {
+	const unit = 1000
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }

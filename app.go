@@ -23,6 +23,7 @@ type App struct {
 	tm *transferManager
 	rm *relayManager
 	hm *historyManager
+	lm *logManager
 
 	settingsMu sync.Mutex
 	settings   Settings
@@ -31,19 +32,26 @@ type App struct {
 func NewApp() *App {
 	tm := newTransferManager()
 	hm := newHistoryManager(historyPath())
+	lm := newLogManager()
+	rm := newRelayManager()
 	tm.history = hm
+	tm.logger = lm
+	rm.logger = lm
 	return &App{
 		tm:       tm,
-		rm:       newRelayManager(),
+		rm:       rm,
 		hm:       hm,
+		lm:       lm,
 		settings: loadSettings(),
 	}
 }
 
 func (a *App) startup(ctx context.Context) {
+	a.lm.setWailsCtx(ctx)
 	a.tm.setWailsCtx(ctx)
 	a.rm.setWailsCtx(ctx)
 	wailsruntime.OnFileDrop(ctx, a.onFileDrop)
+	a.logInfo("app", "croc-gui started")
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -139,6 +147,7 @@ func (a *App) startSend(paths []string, sendText string, cleanup func()) (string
 	filesInfo, emptyFolders, totalFolders, err := croc.GetFilesInfoWithExactExclusions(paths, false, false, nil, nil)
 	if err != nil {
 		a.tm.reset()
+		a.logError("transfer", "send failed to start: %s", err)
 		return "", err
 	}
 	if len(filesInfo) == 0 && len(emptyFolders) == 0 {
@@ -158,10 +167,16 @@ func (a *App) startSend(paths []string, sendText string, cleanup func()) (string
 	cr, err := croc.NewCtx(ctx, opts)
 	if err != nil {
 		a.tm.reset()
+		a.logError("transfer", "send failed to start: %s", err)
 		return "", err
 	}
 	cr.SetHooks(a.tm.hooks())
 	a.tm.setClient(cr)
+	if opts.SendingText {
+		a.logInfo("transfer", "sending text, code %s", opts.SharedSecret)
+	} else {
+		a.logInfo("transfer", "sending %d item(s), code %s", len(paths), opts.SharedSecret)
+	}
 	go func() {
 		err := cr.Send(filesInfo, emptyFolders, totalFolders)
 		if cleanup != nil {
@@ -206,11 +221,13 @@ func (a *App) StartReceive(code string, outDir string) error {
 	cr, err := croc.NewCtx(ctx, opts)
 	if err != nil {
 		a.tm.reset()
+		a.logError("transfer", "receive failed to start: %s", err)
 		return err
 	}
 	cr.SetHooks(a.tm.hooks())
 	a.tm.setClient(cr)
 	a.tm.setReceiveDir(absDir)
+	a.logInfo("transfer", "receiving with code %s into %s", code, absDir)
 	// croc writes received files relative to the working directory (same
 	// mechanism as the CLI's --out)
 	oldWd, _ := os.Getwd()
@@ -227,6 +244,7 @@ func (a *App) StartReceive(code string, outDir string) error {
 }
 
 func (a *App) CancelTransfer() {
+	a.logWarn("transfer", "cancel requested")
 	a.tm.cancelTransfer()
 }
 
@@ -289,6 +307,18 @@ func (a *App) ClearHistory() {
 	a.hm.clear()
 }
 
+// --- logs ---
+
+// GetLogs returns the buffered log entries, oldest first.
+func (a *App) GetLogs() []logEntry {
+	return a.lm.list()
+}
+
+// ClearLogs empties the log buffer.
+func (a *App) ClearLogs() {
+	a.lm.clear()
+}
+
 // --- settings ---
 
 func (a *App) GetSettings() Settings {
@@ -304,6 +334,7 @@ func (a *App) SaveSettings(s Settings) error {
 	a.settingsMu.Lock()
 	a.settings = s
 	a.settingsMu.Unlock()
+	a.logDebug("settings", "settings saved")
 	return nil
 }
 

@@ -25,6 +25,8 @@ type relayManager struct {
 	wailsCtx context.Context
 	// emit publishes a frontend event; set by setWailsCtx, swappable in tests
 	emit func(event string, data interface{})
+	// logger records lifecycle events; set by NewApp
+	logger *logManager
 
 	mu      sync.Mutex
 	running bool
@@ -85,6 +87,9 @@ func (r *relayManager) start(ports []string, password string) error {
 	}
 	r.running = true
 	r.emitEvent(eventRelayState, relayState{Running: true, Ports: clean})
+	if r.logger != nil {
+		r.logger.log(levelInfo, "relay", "relay listening on ports %s", strings.Join(clean, ", "))
+	}
 
 	// first server to exit shuts the whole relay down and reports why
 	go func() {
@@ -100,6 +105,11 @@ func (r *relayManager) start(ports []string, password string) error {
 		state := relayState{Running: false, Ports: ports}
 		if err != nil {
 			state.Error = err.Error()
+			if r.logger != nil {
+				r.logger.log(levelError, "relay", "relay exited: %s", err)
+			}
+		} else if r.logger != nil {
+			r.logger.log(levelInfo, "relay", "relay stopped")
 		}
 		r.emitEvent(eventRelayState, state)
 	}()

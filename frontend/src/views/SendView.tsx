@@ -62,7 +62,7 @@ export default function SendView({ transfer }: { transfer: TransferModel }) {
       <div className="view">
         <h2 className="view-title">Send</h2>
         <CodeDisplay code={transfer.code} />
-        <StatusCard transfer={transfer} onCancel={Backend.CancelTransfer} />
+        <StatusCard transfer={transfer} onCancel={() => Backend.CancelTransfer()} />
         {(transfer.phase === "done" ||
           transfer.phase === "error" ||
           transfer.phase === "cancelled") && (

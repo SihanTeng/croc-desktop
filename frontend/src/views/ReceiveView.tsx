@@ -232,7 +232,7 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
         <h2 className="view-title">Receive</h2>
         <StatusCard
           transfer={transfer}
-          onCancel={Backend.CancelTransfer}
+          onCancel={() => Backend.CancelTransfer()}
           doneContent={doneContent}
         />
         {(transfer.phase === "done" ||

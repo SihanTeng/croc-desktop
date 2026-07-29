@@ -104,6 +104,14 @@ export interface HistoryItem {
   dir?: string;
 }
 
+export interface LogEntry {
+  id: string;
+  time: string;
+  level: "debug" | "info" | "warn" | "error";
+  source: string;
+  message: string;
+}
+
 export interface Settings {
   relayAddress: string;
   relayAddress6: string;

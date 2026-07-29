@@ -319,8 +319,10 @@ pre,
   font-weight: 500;
   font-size: var(--text-sm);
   min-height: 2.25rem;
+  padding: 0 var(--space-sm);
   border-radius: calc(var(--radius-control) - 2px);
   cursor: pointer;
+  white-space: nowrap;
   transition:
     background-color var(--dur-micro) var(--ease-out),
     color var(--dur-micro) var(--ease-out);
@@ -841,6 +843,89 @@ select.input {
 
 .history-text {
   max-height: 120px;
+}
+
+/* ---------- logs ---------- */
+
+.logs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.logs-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.logs-list {
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper);
+  padding: var(--space-xs) 0;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.log-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  padding: var(--space-2xs) var(--space-md);
+  font-size: var(--text-sm);
+}
+
+.log-row:hover {
+  background: var(--color-paper-2);
+}
+
+.log-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.log-level {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  width: 3.5em;
+  flex-shrink: 0;
+}
+
+.log-level-debug {
+  color: var(--color-muted);
+}
+
+.log-level-info {
+  color: var(--color-ok);
+}
+
+.log-level-warn {
+  color: var(--color-accent);
+}
+
+.log-level-error {
+  color: var(--color-error);
+}
+
+.log-source {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-muted);
+  flex-shrink: 0;
+}
+
+.log-message {
+  color: var(--color-ink-2);
+  word-break: break-word;
+  user-select: text;
 }
 
 /* ---------- modal ---------- */

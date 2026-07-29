@@ -4,17 +4,19 @@ import { useTransfer } from "./useTransfer";
 import SendView from "./views/SendView";
 import ReceiveView from "./views/ReceiveView";
 import HistoryView from "./views/HistoryView";
+import LogsView from "./views/LogsView";
 import RelayView from "./views/RelayView";
 import SettingsView from "./views/SettingsView";
 import { AcceptModal, OverwriteModal } from "./components/Modals";
 import Logo from "./components/Logo";
 
-type Tab = "send" | "receive" | "history" | "relay" | "settings";
+type Tab = "send" | "receive" | "history" | "logs" | "relay" | "settings";
 
 const tabs: { id: Tab; label: string }[] = [
   { id: "send", label: "Send" },
   { id: "receive", label: "Receive" },
   { id: "history", label: "History" },
+  { id: "logs", label: "Logs" },
   { id: "relay", label: "Relay" },
   { id: "settings", label: "Settings" },
 ];
@@ -71,6 +73,9 @@ export default function App() {
         </div>
         <div className={tab === "history" ? "" : "hidden"}>
           <HistoryView />
+        </div>
+        <div className={tab === "logs" ? "" : "hidden"}>
+          <LogsView />
         </div>
         <div className={tab === "relay" ? "" : "hidden"}>
           <RelayView />
