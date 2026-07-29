@@ -65,12 +65,13 @@ jobs:
           mkdir -p AppDir/usr/bin
           cp build/bin/croc-gui AppDir/usr/bin/
           # linuxdeploy only accepts standard icon resolutions (max 512px)
-          convert build/appicon.png -resize 512x512 build/appicon-512.png
+          # and deploys the icon by basename, which must match Icon=croc-gui
+          convert build/appicon.png -resize 512x512 /tmp/croc-gui.png
           ./linuxdeploy.AppImage --appimage-extract-and-run \
             --appdir AppDir \
             -e AppDir/usr/bin/croc-gui \
             -d packaging/linux/croc-gui.desktop \
-            -i build/appicon-512.png \
+            -i /tmp/croc-gui.png \
             --output appimage
           mv croc-gui-x86_64.AppImage croc-gui_linux-amd64.AppImage
 
@@ -99,7 +100,7 @@ jobs:
           # version landed rather than hardcoding v3.11
           $wix = (Get-ChildItem "${env:ProgramFiles(x86)}\WiX Toolset v3*\bin" -Directory | Select-Object -First 1).FullName
           & "$wix\candle.exe" packaging\windows\Product.wxs -out Product.wixobj
-          & "$wix\light.exe" Product.wixobj -ext WixUIExtension -out croc-gui_windows-amd64.msi
+          & "$wix\light.exe" Product.wixobj -ext WixUIExtension -sice:ICE64 -out croc-gui_windows-amd64.msi
 
       # ---------- publish ----------
 

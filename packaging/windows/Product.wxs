@@ -7,7 +7,7 @@
            Manufacturer="croc"
            UpgradeCode="8fca5e75-eb3b-4dcf-b7cc-c482df60c3fc">
 
-    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="x64"
              Description="croc — easily and securely transfer files between computers" />
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of croc is already installed." />
@@ -31,13 +31,13 @@
     </Directory>
 
     <ComponentGroup Id="CrocFiles" Directory="INSTALLFOLDER">
-      <Component Id="CrocExe" Guid="*">
+      <Component Id="CrocExe" Guid="*" Win64="yes">
         <File Id="crocgui.exe" Source="build\bin\croc-gui.exe" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
     <ComponentGroup Id="CrocShortcuts" Directory="CrocMenuDir">
-      <Component Id="CrocShortcut" Guid="*">
+      <Component Id="CrocShortcut" Guid="*" Win64="yes">
         <Shortcut Id="CrocStartMenu"
                   Name="croc"
                   Description="Transfer files between computers"
