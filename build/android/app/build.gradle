@@ -74,6 +74,15 @@ android {
         doNotStrip '*/arm64-v8a/libwails.so'
         doNotStrip '*/x86_64/libwails.so'
     }
+
+    // Prefer uncompressed, page-aligned native libs so 16 KB page-size
+    // devices (Android 15+) can map libwails.so correctly. The .so itself
+    // must also be linked with -Wl,-z,max-page-size=16384 (see Taskfile).
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
 }
 
 dependencies {

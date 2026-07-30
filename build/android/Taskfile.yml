@@ -104,12 +104,40 @@ tasks:
 
         export CGO_ENABLED=1
         export GOOS=android
+        # Android 15+ / Play: 16 KB page-size devices require ELF LOAD segments
+        # aligned to 16384 (default NDK ≤27 is 4 KB). See:
+        # https://developer.android.com/guide/practices/page-sizes
+        export CGO_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384${CGO_LDFLAGS:+ $CGO_LDFLAGS}"
 
         mkdir -p {{.BIN_DIR}}
         mkdir -p build/android/app/src/main/jniLibs/$JNI_DIR
 
         go build -buildmode=c-shared -overlay build/android/overlay.json {{.BUILD_FLAGS}} \
           -o build/android/app/src/main/jniLibs/$JNI_DIR/libwails.so
+
+        # Fail the build if the .so is not 16 KB-aligned (Play / 16 KB devices).
+        SO="build/android/app/src/main/jniLibs/$JNI_DIR/libwails.so"
+        if command -v readelf >/dev/null 2>&1; then
+          # Last column of LOAD rows is Align; require ≥ 0x4000 (16384).
+          # bash $((0x4000)) handles hex; portable without gawk strtonum.
+          BAD=0
+          while read -r align; do
+            [ -z "$align" ] && continue
+            val=$((align))
+            if [ "$val" -lt 16384 ]; then
+              echo "Error: $SO has LOAD Align $align (< 16 KB). Rebuild with CGO_LDFLAGS max-page-size=16384."
+              readelf -W -l "$SO" | head -40
+              BAD=1
+              break
+            fi
+          done < <(readelf -W -l "$SO" 2>/dev/null | awk '/LOAD/ { print $NF }')
+          if [ "$BAD" -ne 0 ]; then
+            exit 1
+          fi
+          echo "16 KB page-size OK for $SO"
+        else
+          echo "warning: readelf not found; skipping 16 KB alignment check"
+        fi
     vars:
       BUILD_FLAGS: '{{if eq .PRODUCTION "true"}}-tags production,android -trimpath -buildvcs=false -ldflags="-w -s"{{else}}-tags android,debug -buildvcs=false -gcflags=all="-l"{{end}}'
 
