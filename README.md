@@ -111,6 +111,28 @@ wails3 build -tags gtk3   # Linux with webkit2gtk 4.1 (default for this repo)
 On macOS/Windows, omit the gtk3 tag (`wails3 build`). For Linux with gtk4 +
 webkitgtk 6 installed: `EXTRA_TAGS= wails3 build`.
 
+## Mobile (iOS / Android)
+
+Wails v3 builds the same Go + React app for mobile. The UI is responsive:
+desktop keeps the left side-rail; below ~720px (phones and the mobile
+webview) it switches to a bottom tab bar with safe-area padding.
+
+Scaffold lives under `build/ios/` and `build/android/`. You need the platform
+SDKs (`wails3 doctor` reports what it can see).
+
+```sh
+# iOS Simulator (requires full Xcode on macOS)
+wails3 task ios:run
+# or: task ios:package IOS_PLATFORM=device CODESIGN_IDENTITY="Apple Development: …"
+
+# Android emulator / device (requires Android SDK + NDK)
+wails3 task android:run
+```
+
+Bundle / application IDs default to `com.schollz.croc-desktop` (see
+`build/config.yml` and the platform Taskfiles). Resize the desktop window
+down to ~360px wide to preview the mobile chrome without a device.
+
 ## Test
 
 Three layers:

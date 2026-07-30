@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"log"
+	"runtime"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -17,9 +18,9 @@ var appIcon []byte
 func main() {
 	svc := NewApp()
 
-	app := application.New(application.Options{
+	opts := application.Options{
 		Name:        "croc-desktop",
-		Description: "Desktop GUI for croc — encrypted peer-to-peer file transfer",
+		Description: "GUI for croc — encrypted peer-to-peer file transfer",
 		Icon:        appIcon,
 		Services: []application.Service{
 			application.NewService(svc),
@@ -36,18 +37,27 @@ func main() {
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
-	})
+		// iOS WKWebView defaults; refined further under //go:build ios
+		IOS: application.IOSOptions{
+			EnableInlineMediaPlayback: true,
+			BackgroundColour:          application.NewRGB(248, 250, 253),
+		},
+	}
+	modifyOptionsForPlatform(&opts)
 
+	app := application.New(opts)
+
+	// Phone-friendly min size so the responsive layout can be exercised by
+	// resizing the desktop window; mobile platforms ignore window geometry.
 	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:            "croc-desktop",
 		Width:            1024,
 		Height:           720,
-		MinWidth:         820,
-		MinHeight:        600,
+		MinWidth:         360,
+		MinHeight:        480,
 		BackgroundColour: application.NewRGB(248, 250, 253),
-		// native file drops: elements with data-file-drop-target opt in as
-		// drop targets (see frontend DropZone).
-		EnableFileDrop: true,
+		// native file drops (desktop); mobile uses document pickers instead
+		EnableFileDrop: !isMobileGOOS(),
 		URL:            "/",
 	})
 
@@ -62,5 +72,14 @@ func main() {
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func isMobileGOOS() bool {
+	switch runtime.GOOS {
+	case "ios", "android":
+		return true
+	default:
+		return false
 	}
 }

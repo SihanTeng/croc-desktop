@@ -1,6 +1,7 @@
 {
   "app.history": "Verlauf",
   "app.logs": "Protokolle",
+  "app.nav": "Hauptnavigation",
   "app.receive": "Empfangen",
   "app.relay": "Relay",
   "app.send": "Senden",

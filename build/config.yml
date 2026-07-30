@@ -7,10 +7,23 @@ info:
   companyName: "croc"
   productName: "croc-desktop"
   productIdentifier: "com.schollz.croc-desktop"
-  description: "Desktop GUI for croc — encrypted peer-to-peer file transfer"
+  description: "GUI for croc — encrypted peer-to-peer file transfer"
   copyright: "© 2026 croc"
   comments: "croc-desktop"
   version: "0.2.0"
+
+# iOS (used by wails3 task ios:* / ios:xcode)
+ios:
+  bundleID: "com.schollz.croc-desktop"
+  displayName: "croc"
+  version: "0.2.0"
+  minIOSVersion: "15.0"
+  company: "croc"
+  comments: "croc mobile"
+
+# Android package id (wails3 task android:*)
+# APP_ID can also be overridden on the command line.
+# android app id defaults to productIdentifier when unset.
 
 dev_mode:
   root_path: .

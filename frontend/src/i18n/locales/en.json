@@ -1,6 +1,7 @@
 {
   "app.history": "History",
   "app.logs": "Logs",
+  "app.nav": "Main navigation",
   "app.receive": "Receive",
   "app.relay": "Relay",
   "app.send": "Send",
