@@ -305,6 +305,7 @@ func buildHistoryItem(isSender bool, status, errMsg string, accept *acceptPayloa
 			}
 			item.Files = append(item.Files, historyFile{
 				Name: filepath.Join(f.Folder, f.Name),
+				Path: filepath.Join(dir, f.Folder, f.Name),
 				Size: f.Size,
 			})
 		}

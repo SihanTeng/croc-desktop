@@ -214,8 +214,8 @@ func TestFileTransfer(t *testing.T) {
 	if r.TotalFiles != 1 || r.TotalSize != int64(len(content)) {
 		t.Errorf("history totals: got %d files / %d bytes", r.TotalFiles, r.TotalSize)
 	}
-	if len(r.Files) != 1 || r.Files[0].Name != "hello.txt" {
-		t.Errorf("history files: got %+v", r.Files)
+	if len(r.Files) != 1 || r.Files[0].Name != "hello.txt" || r.Files[0].Path != wantPath {
+		t.Errorf("history files: got %+v, want path=%s", r.Files, wantPath)
 	}
 
 	sendHist := sender.GetHistory()
@@ -228,6 +228,9 @@ func TestFileTransfer(t *testing.T) {
 	}
 	if len(s.Files) != 1 || s.Files[0].Name != "hello.txt" || s.Files[0].Size != int64(len(content)) {
 		t.Errorf("sender history files: got %+v", s.Files)
+	}
+	if s.Files[0].Path != src {
+		t.Errorf("sender history path: got %q, want %q", s.Files[0].Path, src)
 	}
 }
 

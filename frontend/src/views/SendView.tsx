@@ -5,6 +5,7 @@ import { useT } from "../i18n";
 import DropZone from "../components/DropZone";
 import CodeDisplay from "../components/CodeDisplay";
 import ProgressBar from "../components/ProgressBar";
+import { FileRow } from "../components/FileRow";
 
 function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -37,6 +38,18 @@ export default function SendView({ transfer }: { transfer: TransferModel }) {
     if (dir) setPaths((p) => (p.includes(dir) ? p : [...p, dir]));
   };
   const removePath = (path: string) => setPaths((p) => p.filter((x) => x !== path));
+
+  // folder icons: resolve which picked paths are directories
+  const [dirSet, setDirSet] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let live = true;
+    Backend.PathsIsDir(paths)
+      .then((dirs) => live && setDirSet(new Set(dirs)))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [paths]);
 
   const start = async () => {
     setStartError(null);
@@ -134,16 +147,17 @@ export default function SendView({ transfer }: { transfer: TransferModel }) {
             </div>
           </DropZone>
           {paths.length > 0 && (
-            <ul className="file-list">
+            <div className="file-list file-rows">
               {paths.map((p) => (
-                <li key={p}>
-                  <span className="file-name break-all">{p}</span>
-                  <button className="btn btn-ghost btn-sm" onClick={() => removePath(p)}>
-                    ✕
-                  </button>
-                </li>
+                <FileRow
+                  key={p}
+                  name={p}
+                  path={p}
+                  isDir={dirSet.has(p)}
+                  onRemove={() => removePath(p)}
+                />
               ))}
-            </ul>
+            </div>
           )}
         </>
       ) : (

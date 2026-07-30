@@ -1,52 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { App as Backend, copyToClipboard, formatBytes, ReceivedFile, Settings } from "../api";
-import { decodeDataUrlText, maxTextPreview, previewKind } from "../filepreview";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { App as Backend, copyToClipboard, Settings } from "../api";
 import { TransferModel } from "../useTransfer";
 import { useT } from "../i18n";
+import { FileRow } from "../components/FileRow";
 import { StatusCard } from "./SendView";
 
 function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
   return String(e);
-}
-
-// ReceivedFileCard shows a received file with a best-effort inline preview
-// (image/video/audio/text) and falls back to a plain name+size row.
-function ReceivedFileCard({ file }: { file: ReceivedFile }) {
-  const t = useT();
-  const kind = previewKind(file.name);
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (!kind) return;
-    if (kind === "text" && file.size > maxTextPreview) return;
-    let live = true;
-    Backend.GetFileDataURL(file.path)
-      .then((u) => live && setDataUrl(u))
-      .catch(() => live && setFailed(true));
-    return () => {
-      live = false;
-    };
-  }, [file.path, file.size, kind]);
-
-  return (
-    <div className="recv-file">
-      {kind === "image" && dataUrl && <img className="recv-media" src={dataUrl} alt={file.name} />}
-      {kind === "video" && dataUrl && <video className="recv-media" src={dataUrl} controls />}
-      {kind === "audio" && dataUrl && <audio className="recv-audio" src={dataUrl} controls />}
-      {kind === "text" && dataUrl && <TextPreview dataUrl={dataUrl} />}
-      <p className="hint break-all recv-name" title={file.path}>
-        {file.name} · {formatBytes(file.size)}
-        {failed && ` ${t("receive.previewUnavailable")}`}
-      </p>
-    </div>
-  );
-}
-
-function TextPreview({ dataUrl }: { dataUrl: string }) {
-  const text = useMemo(() => decodeDataUrlText(dataUrl), [dataUrl]);
-  return <pre className="received-text">{text}</pre>;
 }
 
 export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
@@ -206,9 +167,9 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
             <p className="status status-ok">{t("status.complete")}</p>
             <p className="hint break-all">{t("receive.savedTo", { dir: outDir })}</p>
             {transfer.result?.files && transfer.result.files.length > 0 && (
-              <div className="recv-files">
+              <div className="recv-files file-rows">
                 {transfer.result.files.map((f) => (
-                  <ReceivedFileCard key={f.path} file={f} />
+                  <FileRow key={f.path} name={f.name} path={f.path} size={f.size} defaultOpen />
                 ))}
               </div>
             )}

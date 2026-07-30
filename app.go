@@ -82,6 +82,18 @@ func (a *App) PickDirectory() (string, error) {
 	})
 }
 
+// PathsIsDir reports which of the given paths are directories, so the UI can
+// show folder icons for them.
+func (a *App) PathsIsDir(paths []string) []string {
+	var dirs []string
+	for _, p := range paths {
+		if st, err := os.Stat(p); err == nil && st.IsDir() {
+			dirs = append(dirs, p)
+		}
+	}
+	return dirs
+}
+
 func (a *App) GetDefaultDownloadDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -160,6 +172,7 @@ func (a *App) startSend(paths []string, sendText string, cleanup func()) (string
 		sendTotalSize += f.Size
 		sendFiles = append(sendFiles, historyFile{
 			Name: filepath.Join(f.FolderRemote, f.Name),
+			Path: filepath.Join(f.FolderSource, f.Name),
 			Size: f.Size,
 		})
 	}

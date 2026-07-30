@@ -20,6 +20,7 @@ const (
 
 type historyFile struct {
 	Name string `json:"name"`
+	Path string `json:"path,omitempty"` // absolute, for previews
 	Size int64  `json:"size"`
 }
 

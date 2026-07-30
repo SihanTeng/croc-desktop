@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { App as Backend, HistoryItem, formatBytes, onEvent } from "../api";
+import { FileRow } from "../components/FileRow";
 import { useT } from "../i18n";
 
 // file names rendered per entry before collapsing into "…and N more"
@@ -90,15 +91,12 @@ function HistoryRow({ item }: { item: HistoryItem }) {
       {item.error && <p className="error-text">{item.error}</p>}
       {item.isText && item.text && <pre className="received-text history-text">{item.text}</pre>}
       {item.files && item.files.length > 0 && (
-        <ul className="file-list history-files">
+        <div className="file-list history-files file-rows">
           {item.files.slice(0, MAX_SHOWN).map((f, i) => (
-            <li key={i}>
-              <span className="file-name">{f.name}</span>
-              <span className="file-size">{formatBytes(f.size)}</span>
-            </li>
+            <FileRow key={i} name={f.name} path={f.path} size={f.size} />
           ))}
-          {extra > 0 && <li className="file-more">{t("history.andMore", { n: extra })}</li>}
-        </ul>
+          {extra > 0 && <div className="file-more">{t("history.andMore", { n: extra })}</div>}
+        </div>
       )}
       {item.dir && item.status === "completed" && (
         <p className="hint break-all">{t("receive.savedTo", { dir: item.dir })}</p>

@@ -11,6 +11,7 @@ declare global {
         App: {
           PickFiles(): Promise<string[]>;
           PickDirectory(): Promise<string>;
+          PathsIsDir(paths: string[]): Promise<string[]>;
           GetDefaultDownloadDir(): Promise<string>;
           StartSend(paths: string[]): Promise<string>;
           StartSendText(text: string): Promise<string>;

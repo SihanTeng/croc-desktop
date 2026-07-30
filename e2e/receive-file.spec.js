@@ -19,12 +19,12 @@ test("receive a file by pasting a CLI hint; inline image preview", async ({ page
   // extraction worked iff the transfer actually starts (peer code matched)
   await page.click("button:has-text('Accept')", { timeout: 30_000 });
 
-  const img = page.locator(".recv-file img.recv-media");
+  const img = page.locator("img.recv-media");
   await expect(img).toBeVisible({ timeout: 90_000 });
   await page.waitForFunction(() => {
-    const el = document.querySelector(".recv-file img.recv-media");
+    const el = document.querySelector("img.recv-media");
     return el && el.complete && el.naturalWidth > 0;
   });
-  await expect(page.locator(".recv-name")).toContainText("pixel.png");
+  await expect(page.locator(".recv-files .file-name")).toContainText("pixel.png");
   await expect(page.locator(".status-ok")).toHaveText("Transfer complete.");
 });

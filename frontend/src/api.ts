@@ -94,6 +94,7 @@ export interface DonePayload {
 
 export interface HistoryFile {
   name: string;
+  path?: string;
   size: number;
 }
 

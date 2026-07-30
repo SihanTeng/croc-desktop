@@ -41,10 +41,11 @@ func main() {
 			app,
 		},
 		// route native file drops to the runtime callback; elements styled
-		// with --wails-drop-target: drop opt in as drop targets
+		// with --wails-drop-target: drop opt in as drop targets. NOTE: on
+		// Linux the native drop handlers live on the webview's own drag
+		// destination, so DisableWebViewDrop must stay false or drops die
 		DragAndDrop: &options.DragAndDrop{
-			EnableFileDrop:     true,
-			DisableWebViewDrop: true,
+			EnableFileDrop: true,
 		},
 	})
 	if err != nil {

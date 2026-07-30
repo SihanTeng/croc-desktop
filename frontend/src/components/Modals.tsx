@@ -1,5 +1,6 @@
 import { AcceptPayload, OverwritePayload, formatBytes } from "../api";
 import { Modal } from "./Modal";
+import { FileTypeIcon } from "./FileRow";
 import { useT } from "../i18n";
 
 const MAX_LISTED = 8;
@@ -38,6 +39,7 @@ export function AcceptModal({
         <ul className="file-list modal-file-list">
           {payload.files.slice(0, MAX_LISTED).map((f, i) => (
             <li key={i}>
+              <FileTypeIcon name={f.name} />
               <span className="file-name">
                 {f.folder && f.folder !== "." ? `${f.folder}/` : ""}
                 {f.name}
