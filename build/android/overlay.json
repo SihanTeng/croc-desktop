@@ -1,5 +1,0 @@
-{
-  "Replace": {
-    "/home/admin/Projects/croc-gui/main_android.gen.go": "/home/admin/Projects/croc-gui/build/android/gen/main_android.gen.go"
-  }
-}

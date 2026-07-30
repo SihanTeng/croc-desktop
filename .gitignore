@@ -27,3 +27,13 @@ bin/*.app
 *.apk
 *.aab
 *.ipa
+
+# Android / Gradle build outputs (never commit)
+build/android/.gradle/
+build/android/app/build/
+build/android/build/
+build/android/local.properties
+build/android/overlay.json
+build/android/gen/
+bin/*.apk
+*.apk
