@@ -14,11 +14,11 @@ import (
 	"github.com/schollz/croc/v10/src/croc"
 	"github.com/schollz/croc/v10/src/utils"
 	"github.com/skip2/go-qrcode"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// App is the Wails-bound backend. All exported methods are callable from the
-// frontend.
+// App is the Wails-bound backend service. All exported methods are callable
+// from the frontend via generated bindings.
 type App struct {
 	tm *transferManager
 	rm *relayManager
@@ -46,40 +46,55 @@ func NewApp() *App {
 	}
 }
 
-func (a *App) startup(ctx context.Context) {
-	a.lm.setWailsCtx(ctx)
-	a.tm.setWailsCtx(ctx)
-	a.rm.setWailsCtx(ctx)
-	wailsruntime.OnFileDrop(ctx, a.onFileDrop)
+// ServiceStartup wires managers to the Wails event bus. File drops are handled
+// on the window in main.go.
+func (a *App) ServiceStartup(_ context.Context, _ application.ServiceOptions) error {
+	a.wireEmit(func(event string, data interface{}) {
+		if app := application.Get(); app != nil {
+			app.Event.Emit(event, data)
+		}
+	})
 	a.logInfo("app", "croc-desktop started")
+	return nil
 }
 
-func (a *App) shutdown(ctx context.Context) {
+// ServiceShutdown cancels any in-flight transfer and stops a hosted relay.
+func (a *App) ServiceShutdown() error {
 	a.tm.cancelTransfer()
 	a.rm.stop()
+	return nil
 }
 
-// onFileDrop receives native file drops (paths, not web File objects) and
-// forwards them to the frontend.
-func (a *App) onFileDrop(x, y int, paths []string) {
-	if a.tm.wailsCtx == nil {
-		return
-	}
-	wailsruntime.EventsEmit(a.tm.wailsCtx, "files:dropped", paths)
+// wireEmit publishes frontend events; tests inject a capture sink instead.
+func (a *App) wireEmit(emit func(event string, data interface{})) {
+	a.tm.setEmit(emit)
+	a.lm.setEmit(emit)
+	a.rm.setEmit(emit)
 }
 
 // --- dialogs ---
 
 func (a *App) PickFiles() ([]string, error) {
-	return wailsruntime.OpenMultipleFilesDialog(a.tm.wailsCtx, wailsruntime.OpenDialogOptions{
-		Title: "Choose files to send",
-	})
+	app := application.Get()
+	if app == nil {
+		return nil, fmt.Errorf("application not ready")
+	}
+	return app.Dialog.OpenFile().
+		CanChooseFiles(true).
+		SetTitle("Choose files to send").
+		PromptForMultipleSelection()
 }
 
 func (a *App) PickDirectory() (string, error) {
-	return wailsruntime.OpenDirectoryDialog(a.tm.wailsCtx, wailsruntime.OpenDialogOptions{
-		Title: "Choose a folder",
-	})
+	app := application.Get()
+	if app == nil {
+		return "", fmt.Errorf("application not ready")
+	}
+	return app.Dialog.OpenFile().
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		SetTitle("Choose a folder").
+		PromptForSingleSelection()
 }
 
 // PathsIsDir reports which of the given paths are directories, so the UI can

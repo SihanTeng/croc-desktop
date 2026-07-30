@@ -14,6 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@wailsio/runtime": "^3.0.0-alpha2.117",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

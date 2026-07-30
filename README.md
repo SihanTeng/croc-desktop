@@ -14,7 +14,7 @@
   <a href="https://github.com/SihanTeng/croc-desktop/actions/workflows/ci.yml"><img src="https://github.com/SihanTeng/croc-desktop/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
   <a href="https://github.com/SihanTeng/croc-desktop/releases"><img src="https://img.shields.io/github/v/release/SihanTeng/croc-desktop?style=flat-square" alt="Release" /></a>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-1F6FEB?style=flat-square" alt="Platforms" />
-  <img src="https://img.shields.io/badge/built%20with-Wails%20v2-DF3A2C?style=flat-square" alt="Wails v2" />
+  <img src="https://img.shields.io/badge/built%20with-Wails%20v3-DF3A2C?style=flat-square" alt="Wails v3" />
 </p>
 
 <p align="center">
@@ -79,37 +79,49 @@ Download from [Releases](https://github.com/SihanTeng/croc-desktop/releases):
 
 ## Develop
 
-Prerequisites: Go (see `go.mod`), Node.js + npm, the Wails v2 CLI
-(`go install github.com/wailsapp/wails/v2/cmd/wails@latest`), and platform
-webview deps (`wails doctor`; on Linux: GTK3 + webkit2gtk dev packages, e.g.
-`webkit2gtk4.1-devel` on Fedora, `libwebkit2gtk-4.1-dev` on Debian/Ubuntu).
+Prerequisites: Go (see `go.mod`), Node.js + npm, the Wails v3 CLI, and
+platform webview deps (`wails3 doctor`).
 
 ```sh
-wails dev        # hot-reload; on distros with webkit2gtk 4.1:
-                 # WEBKIT_DISABLE_DMABUF_RENDERER=1 wails dev -tags webkit2_41
+# Install the CLI (use -tags gtk3 on Linux if you have webkit2gtk 4.1 but not gtk4)
+go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@latest
+
+# Linux: GTK3 + webkit2gtk 4.1 (this project’s default), e.g.
+#   webkit2gtk4.1-devel on Fedora, libwebkit2gtk-4.1-dev on Debian/Ubuntu
+# Optional native gtk4 path: install gtk4 + webkitgtk 6 and build with EXTRA_TAGS=
+
+WEBKIT_DISABLE_DMABUF_RENDERER=1 wails3 dev   # or: task dev
 ```
 
 (`WEBKIT_DISABLE_DMABUF_RENDERER=1` works around a WebKitGTK crash on some
 Wayland compositors.)
 
+Dev mode loads the Vite server (default port **34115** for this project) and
+rebuilds Go on change. Frontend bindings live under `frontend/bindings/` and
+are regenerated during `wails3 build` / `wails3 generate bindings`.
+
 ## Build
 
 ```sh
-wails build      # add -tags webkit2_41 where applicable
-# binary lands in build/bin/
+wails3 build -tags gtk3   # Linux with webkit2gtk 4.1 (default for this repo)
+# or: task build
+# binary lands in bin/croc-desktop
 ```
+
+On macOS/Windows, omit the gtk3 tag (`wails3 build`). For Linux with gtk4 +
+webkitgtk 6 installed: `EXTRA_TAGS= wails3 build`.
 
 ## Test
 
 Three layers:
 
-- **Backend** (`go test .`): unit tests for settings/history/logger/code
+- **Backend** (`go test -tags gtk3 .`): unit tests for settings/history/logger/code
   parsing plus headless integration tests that drive the real transfer path
   (`App` methods → `src/croc` → in-process relay) without a window:
 
   ```sh
   npm --prefix frontend install && npm --prefix frontend run build  # frontend/dist for go:embed
-  go test .
+  go test -tags gtk3 .
   ```
 
 - **Frontend** (`npm --prefix frontend run test`): vitest unit tests for the
@@ -117,7 +129,7 @@ Three layers:
 
 - **Browser E2E** (`./e2e/run.sh`): playwright drives the real app UI in a
   browser against throwaway croc peers — send text, receive with preview,
-  decline, Esc cancel, history & logs. Uses the running `wails dev` instance
+  decline, Esc cancel, history & logs. Uses the running `wails3 dev` instance
   if there is one, otherwise boots a hermetic sandbox (local relay + isolated
   config). See `e2e/README.md`.
 

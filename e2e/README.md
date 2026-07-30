@@ -10,8 +10,8 @@ end of each transfer.
 ./run.sh           # from this directory
 ```
 
-- With the app already running (`wails dev`), the tests use it; transfers go
-  over the public croc relay (internet required).
+- With the app already running (`wails3 dev` / `task dev`), the tests use it;
+  transfers go over the public croc relay (internet required).
 - Otherwise `run.sh` boots a hermetic sandbox: a local relay (`peers relay`)
   plus the app with an isolated `CROC_CONFIG_DIR`, under `xvfb` when there is
   no display. This is the mode CI uses.

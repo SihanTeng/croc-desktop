@@ -12,10 +12,9 @@ import (
 	"os"
 	"strings"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
-
 	"github.com/makiuchi-d/gozxing"
 	"github.com/makiuchi-d/gozxing/qrcode"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // decodeQrText extracts the text of the first QR code found in an image
@@ -69,11 +68,14 @@ func (a *App) DecodeCodeFromBase64(b64 string) (string, error) {
 
 // PickImage opens a native file dialog filtered to image files.
 func (a *App) PickImage() (string, error) {
-	return wailsruntime.OpenFileDialog(a.tm.wailsCtx, wailsruntime.OpenDialogOptions{
-		Title: "Choose a screenshot of the QR code",
-		Filters: []wailsruntime.FileFilter{
-			{DisplayName: "Images", Pattern: "*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp"},
-			{DisplayName: "All files", Pattern: "*"},
-		},
-	})
+	app := application.Get()
+	if app == nil {
+		return "", fmt.Errorf("application not ready")
+	}
+	return app.Dialog.OpenFile().
+		CanChooseFiles(true).
+		SetTitle("Choose a screenshot of the QR code").
+		AddFilter("Images", "*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp").
+		AddFilter("All files", "*").
+		PromptForSingleSelection()
 }

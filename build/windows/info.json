@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.2.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.2.0",
+			"CompanyName": "croc",
+			"FileDescription": "Desktop GUI for croc — encrypted peer-to-peer file transfer",
+			"LegalCopyright": "© 2026 croc",
+			"ProductName": "croc-desktop",
+			"Comments": "croc-desktop"
+		}
+	}
+}

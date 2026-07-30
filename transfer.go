@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/schollz/croc/v10/src/croc"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // events emitted to the frontend
@@ -60,8 +59,7 @@ type donePayload struct {
 // transferManager runs at most one croc transfer at a time and bridges the
 // croc.Hooks callbacks to Wails frontend events.
 type transferManager struct {
-	wailsCtx context.Context
-	// emit publishes a frontend event; set by setWailsCtx, swappable in tests
+	// emit publishes a frontend event; set by setEmit, swappable in tests
 	emit func(event string, data interface{})
 
 	mu              sync.Mutex
@@ -98,12 +96,9 @@ func newTransferManager() *transferManager {
 	return &transferManager{}
 }
 
-// setWailsCtx wires the manager to the Wails runtime.
-func (t *transferManager) setWailsCtx(ctx context.Context) {
-	t.wailsCtx = ctx
-	t.emit = func(event string, data interface{}) {
-		wailsruntime.EventsEmit(ctx, event, data)
-	}
+// setEmit wires the manager to a frontend event publisher.
+func (t *transferManager) setEmit(emit func(event string, data interface{})) {
+	t.emit = emit
 }
 
 func (t *transferManager) emitEvent(event string, data interface{}) {

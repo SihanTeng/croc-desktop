@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=croc-desktop
+Exec=croc-desktop
+Icon=croc-desktop
+Categories=Development;
+Terminal=false
+Keywords=wails
+Version=1.0
+StartupNotify=false

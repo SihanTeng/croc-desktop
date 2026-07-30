@@ -1,6 +1,6 @@
-// Type declarations for the APIs Wails injects into the window object.
-// The Go backend methods bound in gui/app.go appear under window.go.main.App;
-// the Wails runtime appears under window.runtime.
+// Type declarations for Wails v3 globals used by E2E helpers and the optional
+// window.go bridge installed in api.ts. Production code imports bindings and
+// @wailsio/runtime directly.
 
 export {};
 
@@ -38,9 +38,11 @@ declare global {
         };
       };
     };
-    runtime: {
+    // Optional v2-compat surface for E2E helpers that emit runtime events.
+    runtime?: {
       EventsOn(eventName: string, callback: (data?: any) => void): () => void;
       EventsOff(eventName: string, ...additionalEventNames: string[]): void;
+      EventsEmit?(eventName: string, data?: any): Promise<boolean> | void;
       ClipboardSetText(text: string): Promise<boolean>;
     };
   }

@@ -1,12 +1,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
-
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // log levels
@@ -45,11 +42,10 @@ func newLogManager() *logManager {
 	return &logManager{}
 }
 
-func (m *logManager) setWailsCtx(ctx context.Context) {
+// setEmit wires the manager to a frontend event publisher.
+func (m *logManager) setEmit(emit func(event string, data interface{})) {
 	m.mu.Lock()
-	m.emit = func(event string, data interface{}) {
-		wailsruntime.EventsEmit(ctx, event, data)
-	}
+	m.emit = emit
 	m.mu.Unlock()
 }
 

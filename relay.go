@@ -8,7 +8,6 @@ import (
 
 	"github.com/schollz/croc/v10/src/models"
 	"github.com/schollz/croc/v10/src/tcp"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const eventRelayState = "relay:state"
@@ -22,8 +21,7 @@ type relayState struct {
 // relayManager runs a croc relay (one control port plus transfer ports,
 // mirroring `croc relay`) with cancellable contexts.
 type relayManager struct {
-	wailsCtx context.Context
-	// emit publishes a frontend event; set by setWailsCtx, swappable in tests
+	// emit publishes a frontend event; set by setEmit, swappable in tests
 	emit func(event string, data interface{})
 	// logger records lifecycle events; set by NewApp
 	logger *logManager
@@ -38,12 +36,9 @@ func newRelayManager() *relayManager {
 	return &relayManager{}
 }
 
-// setWailsCtx wires the manager to the Wails runtime.
-func (r *relayManager) setWailsCtx(ctx context.Context) {
-	r.wailsCtx = ctx
-	r.emit = func(event string, data interface{}) {
-		wailsruntime.EventsEmit(ctx, event, data)
-	}
+// setEmit wires the manager to a frontend event publisher.
+func (r *relayManager) setEmit(emit func(event string, data interface{})) {
+	r.emit = emit
 }
 
 func (r *relayManager) emitEvent(event string, data interface{}) {

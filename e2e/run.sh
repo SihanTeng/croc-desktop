@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # Run the browser E2E suite.
 #
-# - If an app is already serving http://localhost:34115 (e.g. `wails dev`),
-#   the tests run against it (transfers go over the public croc relay).
+# - If an app is already serving http://localhost:34115 (e.g. `wails3 dev` /
+#   `task dev`), the tests run against it (transfers go over the public croc
+#   relay).
 # - Otherwise a hermetic sandbox is booted: a local relay plus an isolated
 #   CROC_CONFIG_DIR, with the app started under xvfb when there is no display.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 URL="${E2E_APP_URL:-http://localhost:34115}"
-WAILS="$(command -v wails || echo "$(go env GOPATH)/bin/wails")"
+WAILS3="$(command -v wails3 || echo "$(go env GOPATH)/bin/wails3")"
 RELAY_BASE=29309
 
 APP_PID=""
@@ -37,8 +38,11 @@ JSON
 
   LAUNCHER=""
   if [ -z "${DISPLAY:-}" ]; then LAUNCHER="xvfb-run -a"; fi
+  # gtk3 tag: use webkit2gtk 4.1 (same stack as the previous Wails v2 build).
+  # VITE_PORT keeps the E2E default of 34115.
   (cd .. && CROC_CONFIG_DIR="$SANDBOX/config" WEBKIT_DISABLE_DMABUF_RENDERER=1 \
-    $LAUNCHER "$WAILS" dev -tags webkit2_41) &
+    WAILS_VITE_PORT=34115 \
+    $LAUNCHER "$WAILS3" dev -config ./build/config.yml -port 34115) &
   APP_PID=$!
 
   echo ">> waiting for the app (first build can take a few minutes)"

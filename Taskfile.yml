@@ -1,0 +1,47 @@
+version: '3'
+
+vars:
+  APP_NAME: "croc-desktop"
+  BIN_DIR: "bin"
+  PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 34115}}'
+  GOOS: '{{.GOOS | default OS}}'
+  # Default to gtk3 on Linux so builds work with webkit2gtk 4.1 (same as v2).
+  # For native gtk4/webkitgtk 6: EXTRA_TAGS= (empty) or install gtk4 + webkitgtk6.
+  EXTRA_TAGS: '{{.EXTRA_TAGS | default "gtk3"}}'
+
+includes:
+  common: ./build/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+  darwin: ./build/darwin/Taskfile.yml
+  linux: ./build/linux/Taskfile.yml
+
+tasks:
+  build:
+    summary: Builds the application
+    cmds:
+      - task: "{{.GOOS}}:build"
+        vars:
+          EXTRA_TAGS: "{{.EXTRA_TAGS}}"
+          DEV: "{{.DEV}}"
+          ARCH: "{{.ARCH}}"
+          OUTPUT: "{{.OUTPUT}}"
+
+  package:
+    summary: Packages a production build of the application
+    cmds:
+      - task: "{{.GOOS}}:package"
+        vars:
+          EXTRA_TAGS: "{{.EXTRA_TAGS}}"
+
+  run:
+    summary: Runs the application
+    cmds:
+      - task: "{{.GOOS}}:run"
+        vars:
+          EXTRA_TAGS: "{{.EXTRA_TAGS}}"
+
+  dev:
+    summary: Runs the application in development mode
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}

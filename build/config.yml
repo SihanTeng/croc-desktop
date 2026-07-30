@@ -1,0 +1,47 @@
+# Wails v3 project configuration for croc-desktop.
+# When you update `info` or `fileAssociations`, run
+# `wails3 task common:update:build-assets` to update the assets.
+version: '3'
+
+info:
+  companyName: "croc"
+  productName: "croc-desktop"
+  productIdentifier: "com.schollz.croc-desktop"
+  description: "Desktop GUI for croc — encrypted peer-to-peer file transfer"
+  copyright: "© 2026 croc"
+  comments: "croc-desktop"
+  version: "0.2.0"
+
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - frontend
+      - bin
+      - e2e
+      - docs
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+      - "*_test.go"
+    watched_extension:
+      - "*.go"
+      - "*.js"
+      - "*.ts"
+    git_ignore: true
+  executes:
+    - cmd: wails3 build -tags gtk3 DEV=true
+      type: blocking
+    - cmd: wails3 task common:dev:frontend
+      type: background
+    - cmd: wails3 task run EXTRA_TAGS=gtk3
+      type: primary
+
+fileAssociations: []
+
+other: []
