@@ -25,20 +25,26 @@ Cool engineered paper, one electric cobalt signal, hairline structure, tight
 6 px radii. Cobalt is a light theme; its one dark beat is the graphite
 code-hero card (the transfer code display).
 
-- `--color-paper`      oklch(98.5% 0.004 250)
-- `--color-paper-2`    oklch(96.5% 0.005 250)
-- `--color-ink`        oklch(24% 0.02 258)
-- `--color-ink-2`      oklch(34% 0.018 257)
-- `--color-muted`      oklch(52% 0.012 257)
-- `--color-rule`       oklch(90% 0.006 250)
-- `--color-rule-2`     oklch(84% 0.008 252)
-- `--color-accent`     oklch(54% 0.20 256)
+Cobalt also ships a **dark variant** (Settings → Theme, or the OS preference
+when set to System). It inverts the surface order, keeps the same hues, and
+brightens the accent for contrast. Values live in `tokens.css` under
+`[data-theme="dark"]`; components must reference tokens, never raw colors, so
+both themes stay in sync.
+
+- `--color-paper`      oklch(98.5% 0.004 250)  · dark: oklch(19% 0.012 258)
+- `--color-paper-2`    oklch(96.5% 0.005 250)  · dark: oklch(23% 0.014 258)
+- `--color-ink`        oklch(24% 0.02 258)     · dark: oklch(93% 0.005 250)
+- `--color-ink-2`      oklch(34% 0.018 257)    · dark: oklch(80% 0.008 252)
+- `--color-muted`      oklch(52% 0.012 257)    · dark: oklch(62% 0.012 257)
+- `--color-rule`       oklch(90% 0.006 250)    · dark: oklch(30% 0.01 255)
+- `--color-rule-2`     oklch(84% 0.008 252)    · dark: oklch(38% 0.012 256)
+- `--color-accent`     oklch(54% 0.20 256)     · dark: oklch(65% 0.19 256)
 - `--color-accent-ink` oklch(99% 0.003 256)
-- `--color-focus`      oklch(54% 0.20 256)
-- `--color-graphite`   oklch(22% 0.016 260)
-- `--color-graphite-2` oklch(30% 0.014 260)
-- `--color-ok`         oklch(50% 0.17 155)
-- `--color-error`      oklch(55% 0.20 25)
+- `--color-focus`      oklch(54% 0.20 256)     · dark: oklch(65% 0.19 256)
+- `--color-graphite`   oklch(22% 0.016 260)    · dark: oklch(15% 0.012 260)
+- `--color-graphite-2` oklch(30% 0.014 260)    · dark: oklch(24% 0.014 260)
+- `--color-ok`         oklch(50% 0.17 155)     · dark: oklch(65% 0.17 155)
+- `--color-error`      oklch(55% 0.20 25)      · dark: oklch(68% 0.19 25)
 
 ## Typography
 
@@ -107,4 +113,20 @@ rail; paper on cobalt for the app icon. Source: `src/assets/logo.svg`.
 ### tokens.css
 
 Canonical token block — see `frontend/src/tokens.css` (imported by
-`styles.css`; every color/font/space/ease references a named token).
+`styles.css`; every color/font/space/ease references a named token). Beyond
+the palette, type scale, spacing scale, and motion tokens, it owns:
+
+- shape: `--radius-control`, `--radius-card`, `--radius-pill`
+- lines & focus: `--border-hairline` (1px), `--focus-ring-width` /
+  `--focus-ring-offset` (2px per Microinteractions)
+- control heights: `--control-height` (inputs, primary buttons),
+  `--control-height-md` (default buttons), `--control-height-sm`
+  (segments), `--control-height-xs` (small buttons)
+- themed assets: `--select-chevron` (per-theme variant; data-URIs can't read
+  tokens, so the variants live in the theme blocks)
+
+Rules of the system: component CSS references tokens for anything
+cross-cutting (color, type, space, shape, lines, motion, control heights).
+One-off component metrics (QR size, progress track height, text preview
+clamps) stay local. Themed data-URI assets are declared per theme in
+`tokens.css`, never inline in component rules.

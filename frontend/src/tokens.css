@@ -1,4 +1,4 @@
-/* croc GUI design tokens — locked by gui/design.md (theme: Cobalt).
+/* croc-desktop design tokens — locked by design.md (theme: Cobalt).
  * Every colour, font, space, and ease in the app references these names. */
 
 @font-face {
@@ -73,15 +73,56 @@
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --dur-micro: 120ms;
+  --dur-press: 60ms;
   --dur-short: 220ms;
   --dur-long: 420ms;
+  --dur-reduced: 150ms; /* reduced-motion ceiling (design.md) */
 
   /* shape */
   --radius-control: 6px;
   --radius-card: 10px;
+  --radius-pill: 999px;
+
+  /* lines & focus */
+  --border-hairline: 1px;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* control heights (inputs, buttons, segments) */
+  --control-height: 2.75rem;
+  --control-height-md: 2.5rem;
+  --control-height-sm: 2.25rem;
+  --control-height-xs: 2rem;
+
+  /* themed assets (data-URIs can't read tokens; theme variants live here) */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23557082' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 
   /* z scale */
   --z-base: 1;
   --z-raised: 10;
   --z-modal: 400;
+}
+
+/* dark theme — same Cobalt hues, inverted surface order; accent brightened
+ * to keep contrast on dark paper */
+[data-theme="dark"] {
+  --color-paper: oklch(19% 0.012 258);
+  --color-paper-2: oklch(23% 0.014 258);
+  --color-ink: oklch(93% 0.005 250);
+  --color-ink-2: oklch(80% 0.008 252);
+  --color-muted: oklch(62% 0.012 257);
+  --color-rule: oklch(30% 0.01 255);
+  --color-rule-2: oklch(38% 0.012 256);
+  --color-accent: oklch(65% 0.19 256);
+  --color-accent-2: oklch(70% 0.18 256);
+  --color-accent-ink: oklch(99% 0.003 256);
+  --color-focus: oklch(65% 0.19 256);
+  --color-graphite: oklch(15% 0.012 260);
+  --color-graphite-2: oklch(24% 0.014 260);
+  --color-graphite-3: oklch(80% 0.01 258);
+  --color-ok: oklch(65% 0.17 155);
+  --color-error: oklch(68% 0.19 25);
+  --shadow-whisper: 0 1px 2px oklch(0% 0 0 / 0.4);
+
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23a8b4c4' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }

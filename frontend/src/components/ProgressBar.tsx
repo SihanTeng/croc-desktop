@@ -1,6 +1,8 @@
 import { ProgressPayload, formatBytes } from "../api";
+import { useT } from "../i18n";
 
 export default function ProgressBar({ progress }: { progress: ProgressPayload }) {
+  const t = useT();
   const pct =
     progress.bytesTotal > 0 ? Math.min(100, (progress.bytesDone / progress.bytesTotal) * 100) : 0;
   return (
@@ -18,7 +20,10 @@ export default function ProgressBar({ progress }: { progress: ProgressPayload })
         <span>{pct.toFixed(1)}%</span>
         {progress.filesTotal > 1 && (
           <span>
-            file {Math.min(progress.filesDone + 1, progress.filesTotal)} of {progress.filesTotal}
+            {t("progress.fileOfTotal", {
+              done: Math.min(progress.filesDone + 1, progress.filesTotal),
+              total: progress.filesTotal,
+            })}
           </span>
         )}
       </div>

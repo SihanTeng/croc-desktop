@@ -48,8 +48,8 @@ pre,
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
   border-radius: var(--radius-control);
 }
 
@@ -65,7 +65,7 @@ pre,
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--color-rule);
+  border-right: var(--border-hairline) solid var(--color-rule);
   background: var(--color-paper);
   padding: var(--space-lg) var(--space-sm) var(--space-md);
   gap: var(--space-lg);
@@ -191,7 +191,7 @@ pre,
 
 .card {
   background: var(--color-paper);
-  border: 1px solid var(--color-rule);
+  border: var(--border-hairline) solid var(--color-rule);
   border-radius: var(--radius-card);
   padding: var(--space-md) var(--space-lg);
   display: flex;
@@ -206,9 +206,9 @@ pre,
   align-items: center;
   justify-content: center;
   gap: var(--space-xs);
-  border: 1px solid transparent;
+  border: var(--border-hairline) solid transparent;
   border-radius: var(--radius-control);
-  min-height: 2.5rem;
+  min-height: var(--control-height-md);
   padding: var(--space-xs) var(--space-md);
   font-family: var(--font-body);
   font-size: var(--text-sm);
@@ -226,7 +226,7 @@ pre,
 
 .btn:active {
   transform: translateY(1px);
-  transition-duration: 60ms;
+  transition-duration: var(--dur-press);
 }
 
 .btn:disabled {
@@ -271,13 +271,13 @@ pre,
 }
 
 .btn-lg {
-  min-height: 2.75rem;
+  min-height: var(--control-height);
   padding: var(--space-sm) var(--space-lg);
   font-size: var(--text-base);
 }
 
 .btn-sm {
-  min-height: 2rem;
+  min-height: var(--control-height-xs);
   padding: var(--space-3xs) var(--space-sm);
   font-size: var(--text-xs);
 }
@@ -304,7 +304,7 @@ pre,
 
 .segmented {
   display: flex;
-  border: 1px solid var(--color-rule-2);
+  border: var(--border-hairline) solid var(--color-rule-2);
   border-radius: var(--radius-control);
   padding: var(--space-3xs);
   gap: var(--space-3xs);
@@ -318,7 +318,7 @@ pre,
   font-family: var(--font-body);
   font-weight: 500;
   font-size: var(--text-sm);
-  min-height: 2.25rem;
+  min-height: var(--control-height-sm);
   padding: 0 var(--space-sm);
   border-radius: calc(var(--radius-control) - 2px);
   cursor: pointer;
@@ -377,7 +377,7 @@ pre,
 
 .file-list {
   list-style: none;
-  border: 1px solid var(--color-rule);
+  border: var(--border-hairline) solid var(--color-rule);
   border-radius: var(--radius-card);
   overflow: hidden;
   background: var(--color-paper);
@@ -389,7 +389,7 @@ pre,
   justify-content: space-between;
   gap: var(--space-sm);
   padding: var(--space-xs) var(--space-md);
-  border-bottom: 1px solid var(--color-rule);
+  border-bottom: var(--border-hairline) solid var(--color-rule);
   font-size: var(--text-sm);
 }
 
@@ -436,10 +436,10 @@ pre,
 
 .input {
   width: 100%;
-  height: 2.75rem;
+  height: var(--control-height);
   background: var(--color-paper);
-  border: 1px solid var(--color-rule-2);
-  outline: 2px solid transparent;
+  border: var(--border-hairline) solid var(--color-rule-2);
+  outline: var(--focus-ring-width) solid transparent;
   outline-offset: 1px;
   border-radius: var(--radius-control);
   color: var(--color-ink);
@@ -471,7 +471,20 @@ pre,
 }
 
 select.input {
-  padding-right: var(--space-lg);
+  /* native select keeps its own white chrome in dark mode; take over
+   * rendering so tokens apply (chevron asset lives in tokens.css) */
+  -webkit-appearance: none;
+  appearance: none;
+  color: var(--color-ink-2);
+  padding-right: var(--space-xl);
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--space-sm) center;
+}
+
+/* native checkboxes get native chrome too; tint them with the accent */
+input[type="checkbox"] {
+  accent-color: var(--color-accent);
 }
 
 .input-row {
@@ -484,7 +497,7 @@ select.input {
 }
 
 .input-row .btn {
-  min-height: 2.75rem;
+  min-height: var(--control-height);
 }
 
 .code-input {
@@ -497,8 +510,8 @@ select.input {
 .text-input {
   width: 100%;
   background: var(--color-paper);
-  border: 1px solid var(--color-rule-2);
-  outline: 2px solid transparent;
+  border: var(--border-hairline) solid var(--color-rule-2);
+  outline: var(--focus-ring-width) solid transparent;
   outline-offset: 1px;
   border-radius: var(--radius-card);
   color: var(--color-ink);
@@ -543,9 +556,9 @@ select.input {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  border: 1px solid var(--color-rule);
+  border: var(--border-hairline) solid var(--color-rule);
   border-radius: var(--radius-control);
-  min-height: 2.75rem;
+  min-height: var(--control-height);
   padding: var(--space-xs) var(--space-md);
   cursor: pointer;
   font-size: var(--text-sm);
@@ -568,7 +581,7 @@ select.input {
 .code-display {
   background: var(--color-graphite);
   color: var(--color-graphite-3);
-  border: 1px solid var(--color-graphite-2);
+  border: var(--border-hairline) solid var(--color-graphite-2);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-whisper);
   padding: var(--space-lg) var(--space-xl);
@@ -647,15 +660,15 @@ select.input {
 
 .progress-track {
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-paper-2);
-  border: 1px solid var(--color-rule);
+  border: var(--border-hairline) solid var(--color-rule);
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-accent);
   transition: width 150ms linear;
 }
@@ -708,7 +721,7 @@ select.input {
 
 .received-text {
   background: var(--color-paper-2);
-  border: 1px solid var(--color-rule);
+  border: var(--border-hairline) solid var(--color-rule);
   border-radius: var(--radius-control);
   padding: var(--space-sm) var(--space-md);
   font-size: var(--text-sm);
@@ -742,7 +755,7 @@ select.input {
 .recv-media {
   max-width: 100%;
   max-height: 260px;
-  border: 1px solid var(--color-rule);
+  border: var(--border-hairline) solid var(--color-rule);
   border-radius: var(--radius-control);
 }
 
@@ -752,6 +765,57 @@ select.input {
 
 .recv-name {
   margin: 0;
+}
+
+/* ---------- saved codes ---------- */
+
+.saved-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  flex: 1;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border: var(--border-hairline) solid var(--color-rule-2);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+.chip-pick {
+  border: none;
+  background: transparent;
+  padding: var(--space-2xs) var(--space-xs) var(--space-2xs) var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-2);
+  cursor: pointer;
+}
+
+.chip-pick:hover {
+  color: var(--color-accent);
+}
+
+.chip-x {
+  border: none;
+  background: transparent;
+  padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-3xs);
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: var(--text-xs);
+}
+
+.chip-x:hover {
+  color: var(--color-error);
 }
 
 /* ---------- history ---------- */
@@ -773,7 +837,7 @@ select.input {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  border: 1px solid var(--color-rule);
+  border: var(--border-hairline) solid var(--color-rule);
   border-radius: var(--radius-card);
   padding: var(--space-sm) var(--space-md);
   background: var(--color-paper);
@@ -862,7 +926,7 @@ select.input {
 }
 
 .logs-list {
-  border: 1px solid var(--color-rule);
+  border: var(--border-hairline) solid var(--color-rule);
   border-radius: var(--radius-card);
   background: var(--color-paper);
   padding: var(--space-xs) 0;
@@ -943,7 +1007,7 @@ select.input {
 .modal-card {
   width: min(480px, calc(100vw - 48px));
   background: var(--color-paper);
-  border: 1px solid var(--color-rule);
+  border: var(--border-hairline) solid var(--color-rule);
   border-radius: var(--radius-card);
   padding: var(--space-lg);
   display: flex;
@@ -989,7 +1053,7 @@ select.input {
   max-height: 220px;
   overflow-y: auto;
   border: none;
-  border-top: 1px solid var(--color-rule);
+  border-top: var(--border-hairline) solid var(--color-rule);
   border-radius: 0;
 }
 
@@ -1050,7 +1114,7 @@ select.input {
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-rule-2);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -1063,12 +1127,12 @@ select.input {
   *,
   *::before,
   *::after {
-    animation-duration: 150ms !important;
+    animation-duration: var(--dur-reduced) !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 150ms !important;
+    transition-duration: var(--dur-reduced) !important;
   }
 
   .view {
-    animation: fade-in 150ms linear;
+    animation: fade-in var(--dur-reduced) linear;
   }
 }

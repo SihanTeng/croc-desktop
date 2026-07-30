@@ -2,7 +2,7 @@
   <img src="build/appicon.png" alt="croc logo" width="96" height="96" />
 </p>
 
-<h1 align="center">croc GUI</h1>
+<h1 align="center">croc-desktop</h1>
 
 <p align="center">
   <strong>Desktop GUI for <a href="https://github.com/schollz/croc">croc</a></strong> — encrypted,
@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/SihanTeng/croc-gui/actions/workflows/ci.yml"><img src="https://github.com/SihanTeng/croc-gui/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
-  <a href="https://github.com/SihanTeng/croc-gui/releases"><img src="https://img.shields.io/github/v/release/SihanTeng/croc-gui?style=flat-square" alt="Release" /></a>
+  <a href="https://github.com/SihanTeng/croc-desktop/actions/workflows/ci.yml"><img src="https://github.com/SihanTeng/croc-desktop/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://github.com/SihanTeng/croc-desktop/releases"><img src="https://img.shields.io/github/v/release/SihanTeng/croc-desktop?style=flat-square" alt="Release" /></a>
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-1F6FEB?style=flat-square" alt="Platforms" />
   <img src="https://img.shields.io/badge/built%20with-Wails%20v2-DF3A2C?style=flat-square" alt="Wails v2" />
 </p>
@@ -22,7 +22,7 @@
   <img src="docs/images/receive.png" alt="Receive view with inline file preview" width="49%" />
 </p>
 
-Unlike wrappers that spawn the croc CLI, croc GUI links croc's Go packages
+Unlike wrappers that spawn the croc CLI, croc-desktop links croc's Go packages
 **in-process** (via a fork adding a hooks layer). That gives it things a
 subprocess can't have: real accept/overwrite dialogs, structured progress
 events, relay hosting, and accurate transfer state.
@@ -35,11 +35,13 @@ events, relay hosting, and accurate transfer state.
 - Transfer code phrase with QR code, copy buttons for the code and the CLI command
 - Receive by pasting anything: a bare code, `croc <code>`, `CROC_SECRET=… croc`, or a share link
 - Receive by pasting or uploading a screenshot of the sender's QR code
+- Save favorite codes and re-receive with one click
 - Accept/decline and overwrite/resume dialogs — never blind `--yes --overwrite`
 - Live progress with file counts, "verifying" state, and stall hints
 - Cancel any time (button or `Esc`), resume interrupted receives
 - After a receive, previews of images, video, audio, and text inline
 - "Send same files/text again" for repeat transfers
+- Desktop notifications when a transfer completes or fails
 
 **History & logs**
 
@@ -54,6 +56,11 @@ events, relay hosting, and accurate transfer state.
 - Custom relays, relay password, encryption curve, hash algorithm
 - Local-only / disable-local modes, compression and overwrite defaults
 - SOCKS5 and HTTP proxy support
+- Zip folders before sending, exclude patterns, upload rate limit, manual
+  sender address
+- Dark theme (system-following or pinned)
+- Multi-language UI (English, 简体中文, 繁體中文, Español, Français, Deutsch,
+  日本語) — see *Contributing translations*
 
 <p align="center">
   <img src="docs/images/history.png" alt="History tab" width="49%" />
@@ -62,13 +69,13 @@ events, relay hosting, and accurate transfer state.
 
 ## Install
 
-Download from [Releases](https://github.com/SihanTeng/croc-gui/releases):
+Download from [Releases](https://github.com/SihanTeng/croc-desktop/releases):
 
 | Platform | File | Notes |
 | --- | --- | --- |
-| Linux | `croc-gui_*_linux-amd64.AppImage` | `chmod +x`, run |
-| macOS (Apple Silicon) | `croc-gui_*_darwin-arm64.dmg` | ad-hoc signed — Gatekeeper warns on first launch until the app is notarized |
-| Windows | `croc-gui_*_windows-amd64.msi` | WiX installer |
+| Linux | `croc-desktop_*_linux-amd64.AppImage` | `chmod +x`, run |
+| macOS (Apple Silicon) | `croc-desktop_*_darwin-arm64.dmg` | ad-hoc signed — Gatekeeper warns on first launch until the app is notarized |
+| Windows | `croc-desktop_*_windows-amd64.msi` | WiX installer |
 
 ## Develop
 
@@ -116,6 +123,14 @@ Three layers:
 
 Frontend checks: `npm --prefix frontend run typecheck && npm --prefix frontend run lint`.
 
+## Contributing translations
+
+UI strings live in plain JSON files under `frontend/src/i18n/locales/`
+(`en.json` is the canonical key set). To add or improve a language, copy
+`en.json` to `<locale>.json` (e.g. `pt-BR.json`) and translate the values —
+Vite picks the file up automatically, no code changes needed. Keep the keys
+and the `{placeholder}` variables intact.
+
 ## How it works
 
 - `src/croc/hooks.go` (in the croc module) defines `croc.Hooks` —
@@ -129,7 +144,7 @@ Frontend checks: `npm --prefix frontend run typecheck && npm --prefix frontend r
 - `history.go` persists transfer history and `logger.go` the centralized
   leveled log (both in-process; history on disk next to settings).
 - `relay.go` wraps `tcp.RunCtx` for in-app relays.
-- Settings persist to `<croc config dir>/croc-gui.json`.
+- Settings persist to `<croc config dir>/croc-desktop.json`.
 
 This is a separate Go module so the CLI's dependency set stays untouched.
 croc is consumed as a plain module dependency — no sibling checkout needed:
@@ -148,7 +163,7 @@ hooks land upstream in `schollz/croc`, the `replace` line can be deleted.
 >
 > ```sh
 > cd croc && git push origin main:gui-hooks
-> cd ../croc-gui && go get github.com/SihanTeng/croc/v10@gui-hooks && go mod tidy
+> cd ../croc-desktop && go get github.com/SihanTeng/croc/v10@gui-hooks && go mod tidy
 > ```
 
 ## CI & releases

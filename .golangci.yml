@@ -1,4 +1,4 @@
-# golangci-lint configuration for croc-gui.
+# golangci-lint configuration for croc-desktop.
 # Run: golangci-lint run ./...
 
 run:

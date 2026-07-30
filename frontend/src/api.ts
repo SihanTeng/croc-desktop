@@ -23,6 +23,13 @@ const previewStub: Partial<WailsApp> = {
       downloadDir: "",
       socks5: "",
       httpProxy: "",
+      zipFolder: false,
+      exclude: "",
+      throttleUpload: "",
+      ip: "",
+      theme: "system",
+      language: "system",
+      savedCodes: [],
     }),
   GetDefaultDownloadDir: () => Promise.resolve(""),
   GetRelayState: () => Promise.resolve({ running: false }),
@@ -112,6 +119,11 @@ export interface LogEntry {
   message: string;
 }
 
+export interface SavedCode {
+  name: string;
+  code: string;
+}
+
 export interface Settings {
   relayAddress: string;
   relayAddress6: string;
@@ -125,6 +137,13 @@ export interface Settings {
   downloadDir: string;
   socks5: string;
   httpProxy: string;
+  zipFolder: boolean;
+  exclude: string;
+  throttleUpload: string;
+  ip: string;
+  theme: "system" | "light" | "dark";
+  language: string;
+  savedCodes?: SavedCode[];
 }
 
 export interface RelayState {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/schollz/croc/v10/src/comm"
@@ -26,7 +27,7 @@ func TestSettingsRoundTrip(t *testing.T) {
 	}
 
 	got := loadSettings()
-	if got != s {
+	if !reflect.DeepEqual(got, s) {
 		t.Fatalf("round trip mismatch:\n got %+v\nwant %+v", got, s)
 	}
 }
@@ -76,5 +77,45 @@ func TestApplyProxySettings(t *testing.T) {
 	applyProxySettings(Settings{})
 	if comm.Socks5Proxy != "" || comm.HttpProxy != "" {
 		t.Fatalf("proxies not cleared: %q / %q", comm.Socks5Proxy, comm.HttpProxy)
+	}
+}
+
+func TestBuildCrocOptionsTransferFlags(t *testing.T) {
+	opts := buildCrocOptions(Settings{
+		ZipFolder:      true,
+		Exclude:        " *.log, node_modules ,,tmp",
+		IP:             "10.0.0.1:9009",
+		ThrottleUpload: "2m",
+	}, true)
+	if !opts.ZipFolder {
+		t.Error("ZipFolder not mapped")
+	}
+	if len(opts.Exclude) != 3 || opts.Exclude[0] != "*.log" || opts.Exclude[2] != "tmp" {
+		t.Errorf("Exclude not split/trimmed: %+v", opts.Exclude)
+	}
+	if opts.IP != "10.0.0.1:9009" {
+		t.Errorf("IP not mapped: %q", opts.IP)
+	}
+	if opts.ThrottleUpload != "2m" {
+		t.Errorf("ThrottleUpload not mapped: %q", opts.ThrottleUpload)
+	}
+
+	// invalid throttle values are dropped rather than panicking inside croc
+	opts = buildCrocOptions(Settings{ThrottleUpload: "fast"}, true)
+	if opts.ThrottleUpload != "" {
+		t.Errorf("invalid throttle should be dropped, got %q", opts.ThrottleUpload)
+	}
+}
+
+func TestValidThrottle(t *testing.T) {
+	for _, ok := range []string{"", "500", "500k", "2M", "1g"} {
+		if !validThrottle(ok) {
+			t.Errorf("validThrottle(%q) = false, want true", ok)
+		}
+	}
+	for _, bad := range []string{"fast", "1.5m", "10 kb", "-5k", "k"} {
+		if validThrottle(bad) {
+			t.Errorf("validThrottle(%q) = true, want false", bad)
+		}
 	}
 }

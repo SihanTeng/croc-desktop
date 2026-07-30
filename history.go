@@ -50,13 +50,19 @@ func historyPath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "croc-gui-history.json")
+	return filepath.Join(dir, "croc-desktop-history.json")
 }
 
 func newHistoryManager(path string) *historyManager {
 	h := &historyManager{path: path}
 	if path != "" {
-		if b, err := os.ReadFile(path); err == nil {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			// fall back to the pre-rename history file once
+			legacy := filepath.Join(filepath.Dir(path), "croc-gui-history.json")
+			b, err = os.ReadFile(legacy)
+		}
+		if err == nil {
 			_ = json.Unmarshal(b, &h.items)
 		}
 	}

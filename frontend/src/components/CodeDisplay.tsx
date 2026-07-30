@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { App as Backend, copyToClipboard } from "../api";
+import { useT } from "../i18n";
 
 export default function CodeDisplay({ code }: { code: string }) {
+  const t = useT();
   const [qr, setQr] = useState<string>("");
   const [copied, setCopied] = useState(false);
   const [copiedCmd, setCopiedCmd] = useState(false);
@@ -35,10 +37,10 @@ export default function CodeDisplay({ code }: { code: string }) {
         <code className="code-phrase">{code}</code>
         <div className="btn-row">
           <button className="btn btn-ghost-dark btn-sm" onClick={copy}>
-            {copied ? "Copied ✓" : "Copy"}
+            {copied ? t("code.copied") : t("code.copy")}
           </button>
           <button className="btn btn-ghost-dark btn-sm" onClick={copyCommand}>
-            {copiedCmd ? "Copied ✓" : "Copy command"}
+            {copiedCmd ? t("code.copied") : t("code.copyCommand")}
           </button>
         </div>
       </div>
@@ -49,7 +51,7 @@ export default function CodeDisplay({ code }: { code: string }) {
           alt="QR code of the receive phrase"
         />
       )}
-      <p className="hint">The recipient enters this code — or scans the QR — on their device.</p>
+      <p className="hint">{t("code.hint")}</p>
     </div>
   );
 }

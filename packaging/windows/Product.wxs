@@ -32,7 +32,7 @@
 
     <ComponentGroup Id="CrocFiles" Directory="INSTALLFOLDER">
       <Component Id="CrocExe" Guid="*" Win64="yes">
-        <File Id="crocgui.exe" Source="build\bin\croc-gui.exe" KeyPath="yes" />
+        <File Id="crocgui.exe" Source="build\bin\croc-desktop.exe" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
@@ -41,7 +41,7 @@
         <Shortcut Id="CrocStartMenu"
                   Name="croc"
                   Description="Transfer files between computers"
-                  Target="[INSTALLFOLDER]croc-gui.exe"
+                  Target="[INSTALLFOLDER]croc-desktop.exe"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="croc.ico" />
         <RemoveFile Id="RemoveShortcut" Name="*" On="uninstall" />

@@ -231,11 +231,13 @@ func (t *transferManager) finish(err error) {
 		if t.logger != nil {
 			t.logger.log(levelError, "transfer", "transfer failed: %s", errMsg)
 		}
+		notify("croc-desktop", errMsg)
 		t.emitEvent(eventError, errMsg)
 	default:
 		if t.logger != nil {
 			t.logger.log(levelInfo, "transfer", "transfer complete")
 		}
+		notify("croc-desktop", "Transfer complete")
 		t.emitEvent(eventDone, payload)
 	}
 }

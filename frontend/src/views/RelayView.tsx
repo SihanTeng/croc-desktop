@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { App as Backend, RelayState, onEvent } from "../api";
+import { useT } from "../i18n";
 
 function errMsg(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -7,6 +8,7 @@ function errMsg(e: unknown): string {
 }
 
 export default function RelayView() {
+  const t = useT();
   const [ports, setPorts] = useState("9009,9010,9011,9012,9013");
   const [password, setPassword] = useState("");
   const [state, setState] = useState<RelayState>({ running: false });
@@ -44,22 +46,22 @@ export default function RelayView() {
 
   return (
     <div className="view">
-      <h2 className="view-title">Relay</h2>
+      <h2 className="view-title">{t("relay.title")}</h2>
       <div className="card">
         <div className="relay-status">
           <span className={`dot ${state.running ? "dot-on" : "dot-off"}`} />
-          <span className="status">{state.running ? "Relay running" : "Relay stopped"}</span>
+          <span className="status">{state.running ? t("relay.running") : t("relay.stopped")}</span>
           {state.running && <span className="relay-ports">{state.ports?.join(", ")}</span>}
         </div>
         {state.running && (
           <p className="hint">
-            Others can use it as relay address <code>&lt;this-machine-ip&gt;:{firstPort}</code>
+            {t("relay.hint")} <code>&lt;this-machine-ip&gt;:{firstPort}</code>
           </p>
         )}
       </div>
 
       <label className="field">
-        <span className="field-label">Ports (comma separated, first is control)</span>
+        <span className="field-label">{t("relay.portsLabel")}</span>
         <input
           className="input"
           value={ports}
@@ -69,7 +71,7 @@ export default function RelayView() {
       </label>
 
       <label className="field">
-        <span className="field-label">Password (blank uses the croc default)</span>
+        <span className="field-label">{t("relay.passwordLabel")}</span>
         <input
           className="input"
           type="password"
@@ -85,7 +87,7 @@ export default function RelayView() {
         className={`btn btn-lg ${state.running ? "btn-danger" : "btn-primary"}`}
         onClick={toggle}
       >
-        {state.running ? "Stop relay" : "Start relay"}
+        {state.running ? t("relay.stop") : t("relay.start")}
       </button>
     </div>
   );

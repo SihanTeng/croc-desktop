@@ -1,5 +1,5 @@
 {
-  "name": "croc-gui-frontend",
+  "name": "croc-desktop-frontend",
   "private": true,
   "version": "0.1.0",
   "type": "module",

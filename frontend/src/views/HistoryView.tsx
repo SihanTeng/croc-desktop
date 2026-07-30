@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { App as Backend, HistoryItem, formatBytes, onEvent } from "../api";
+import { useT } from "../i18n";
 
 // file names rendered per entry before collapsing into "…and N more"
 const MAX_SHOWN = 5;
 
 export default function HistoryView() {
   const [items, setItems] = useState<HistoryItem[] | null>(null);
+  const t = useT();
 
   const load = useCallback(() => {
     Backend.GetHistory()
@@ -34,17 +36,17 @@ export default function HistoryView() {
   return (
     <div className="view">
       <div className="history-head">
-        <h2 className="view-title">History</h2>
+        <h2 className="view-title">{t("history.title")}</h2>
         {items && items.length > 0 && (
           <button className="btn btn-ghost btn-sm" onClick={clear}>
-            Clear history
+            {t("history.clear")}
           </button>
         )}
       </div>
       {items === null ? (
-        <p className="hint">Loading…</p>
+        <p className="hint">{t("common.loading")}</p>
       ) : items.length === 0 ? (
-        <p className="hint">No transfers yet.</p>
+        <p className="hint">{t("history.empty")}</p>
       ) : (
         <ul className="history-list">
           {items.map((item) => (
@@ -57,6 +59,7 @@ export default function HistoryView() {
 }
 
 function HistoryRow({ item }: { item: HistoryItem }) {
+  const t = useT();
   const when = new Date(item.time).toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
@@ -68,14 +71,18 @@ function HistoryRow({ item }: { item: HistoryItem }) {
         <span className={`history-arrow history-arrow-${item.direction}`}>
           {item.direction === "send" ? "↑" : "↓"}
         </span>
-        <span className="history-verb">{item.direction === "send" ? "Sent" : "Received"}</span>
+        <span className="history-verb">
+          {item.direction === "send" ? t("history.sent") : t("history.received")}
+        </span>
         {item.isText ? (
-          <span className="history-size">text</span>
+          <span className="history-size">{t("history.text")}</span>
         ) : (
           item.totalSize != null &&
           item.totalSize > 0 && <span className="history-size">{formatBytes(item.totalSize)}</span>
         )}
-        <span className={`history-status history-status-${item.status}`}>{item.status}</span>
+        <span className={`history-status history-status-${t(`history.status.${item.status}`)}`}>
+          {t(`history.status.${item.status}`)}
+        </span>
         <time className="history-time" dateTime={item.time}>
           {when}
         </time>
@@ -90,11 +97,11 @@ function HistoryRow({ item }: { item: HistoryItem }) {
               <span className="file-size">{formatBytes(f.size)}</span>
             </li>
           ))}
-          {extra > 0 && <li className="file-more">…and {extra} more</li>}
+          {extra > 0 && <li className="file-more">{t("history.andMore", { n: extra })}</li>}
         </ul>
       )}
       {item.dir && item.status === "completed" && (
-        <p className="hint break-all">Saved to {item.dir}</p>
+        <p className="hint break-all">{t("receive.savedTo", { dir: item.dir })}</p>
       )}
     </li>
   );

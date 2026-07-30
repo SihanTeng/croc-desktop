@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { App as Backend } from "./api";
 import { useTransfer } from "./useTransfer";
+import { applyTheme } from "./theme";
+import { setLanguage, useT } from "./i18n";
 import SendView from "./views/SendView";
 import ReceiveView from "./views/ReceiveView";
 import HistoryView from "./views/HistoryView";
@@ -12,18 +14,29 @@ import Logo from "./components/Logo";
 
 type Tab = "send" | "receive" | "history" | "logs" | "relay" | "settings";
 
-const tabs: { id: Tab; label: string }[] = [
-  { id: "send", label: "Send" },
-  { id: "receive", label: "Receive" },
-  { id: "history", label: "History" },
-  { id: "logs", label: "Logs" },
-  { id: "relay", label: "Relay" },
-  { id: "settings", label: "Settings" },
+const tabs: { id: Tab; labelKey: string }[] = [
+  { id: "send", labelKey: "app.send" },
+  { id: "receive", labelKey: "app.receive" },
+  { id: "history", labelKey: "app.history" },
+  { id: "logs", labelKey: "app.logs" },
+  { id: "relay", labelKey: "app.relay" },
+  { id: "settings", labelKey: "app.settings" },
 ];
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("send");
   const transfer = useTransfer();
+  const t = useT();
+
+  // apply the persisted theme and language at startup
+  useEffect(() => {
+    Backend.GetSettings()
+      .then((s) => {
+        applyTheme(s.theme);
+        setLanguage(s.language);
+      })
+      .catch(() => {});
+  }, []);
 
   // Esc cancels an in-flight transfer from anywhere in the app
   useEffect(() => {
@@ -49,14 +62,14 @@ export default function App() {
           <Logo />
         </div>
         <nav className="rail-nav">
-          {tabs.map((t) => (
+          {tabs.map((item) => (
             <button
-              key={t.id}
-              className={`rail-item ${tab === t.id ? "rail-item-active" : ""}`}
-              onClick={() => setTab(t.id)}
+              key={item.id}
+              className={`rail-item ${tab === item.id ? "rail-item-active" : ""}`}
+              onClick={() => setTab(item.id)}
             >
               <span className="rail-indicator" aria-hidden="true" />
-              <span className="rail-label">{t.label}</span>
+              <span className="rail-label">{t(item.labelKey)}</span>
             </button>
           ))}
         </nav>

@@ -51,7 +51,7 @@ func (a *App) startup(ctx context.Context) {
 	a.tm.setWailsCtx(ctx)
 	a.rm.setWailsCtx(ctx)
 	wailsruntime.OnFileDrop(ctx, a.onFileDrop)
-	a.logInfo("app", "croc-gui started")
+	a.logInfo("app", "croc-desktop started")
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -144,7 +144,7 @@ func (a *App) startSend(paths []string, sendText string, cleanup func()) (string
 	opts.SharedSecret = utils.GetRandomName()
 	opts.SendingText = sendText != ""
 
-	filesInfo, emptyFolders, totalFolders, err := croc.GetFilesInfoWithExactExclusions(paths, false, false, nil, nil)
+	filesInfo, emptyFolders, totalFolders, err := croc.GetFilesInfoWithExactExclusions(paths, opts.ZipFolder, false, opts.Exclude, nil)
 	if err != nil {
 		a.tm.reset()
 		a.logError("transfer", "send failed to start: %s", err)
@@ -336,6 +336,9 @@ func (a *App) GetSettings() Settings {
 }
 
 func (a *App) SaveSettings(s Settings) error {
+	if !validThrottle(s.ThrottleUpload) {
+		return fmt.Errorf("invalid upload limit %q — use a number with an optional k/m/g suffix, e.g. 500k or 2m", s.ThrottleUpload)
+	}
 	if err := saveSettings(s); err != nil {
 		return err
 	}

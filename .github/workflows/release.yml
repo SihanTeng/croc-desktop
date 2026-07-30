@@ -18,18 +18,18 @@ jobs:
           - os: ubuntu-latest
             name: linux-amd64
             platform: linux/amd64
-            bin: croc-gui
-            artifact: croc-gui_${{ github.ref_name }}_linux-amd64.AppImage
+            bin: croc-desktop
+            artifact: croc-desktop_${{ github.ref_name }}_linux-amd64.AppImage
           - os: macos-latest
             name: darwin-arm64
             platform: darwin/arm64
-            bin: croc-gui
-            artifact: croc-gui_${{ github.ref_name }}_darwin-arm64.dmg
+            bin: croc-desktop
+            artifact: croc-desktop_${{ github.ref_name }}_darwin-arm64.dmg
           - os: windows-latest
             name: windows-amd64
             platform: windows/amd64
-            bin: croc-gui.exe
-            artifact: croc-gui_${{ github.ref_name }}_windows-amd64.msi
+            bin: croc-desktop.exe
+            artifact: croc-desktop_${{ github.ref_name }}_windows-amd64.msi
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -66,17 +66,17 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p AppDir/usr/bin
-          cp build/bin/croc-gui AppDir/usr/bin/
+          cp build/bin/croc-desktop AppDir/usr/bin/
           # linuxdeploy only accepts standard icon resolutions (max 512px)
-          # and deploys the icon by basename, which must match Icon=croc-gui
-          convert build/appicon.png -resize 512x512 /tmp/croc-gui.png
+          # and deploys the icon by basename, which must match Icon=croc-desktop
+          convert build/appicon.png -resize 512x512 /tmp/croc-desktop.png
           # linuxdeploy names the AppImage after the desktop file's Name;
           # OUTPUT pins the final artifact name instead
           OUTPUT=${{ matrix.artifact }} ./linuxdeploy.AppImage --appimage-extract-and-run \
             --appdir AppDir \
-            -e AppDir/usr/bin/croc-gui \
-            -d packaging/linux/croc-gui.desktop \
-            -i /tmp/croc-gui.png \
+            -e AppDir/usr/bin/croc-desktop \
+            -d packaging/linux/croc-desktop.desktop \
+            -i /tmp/croc-desktop.png \
             --output appimage
 
       # ---------- macOS: DMG ----------
@@ -85,9 +85,9 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           cd build/bin
-          codesign --deep --force --sign - croc-gui.app
+          codesign --deep --force --sign - croc-desktop.app
           mkdir -p dmg
-          cp -R croc-gui.app dmg/
+          cp -R croc-desktop.app dmg/
           hdiutil create -volname croc -srcfolder dmg -ov -format UDZO ../../${{ matrix.artifact }}
 
       # ---------- Windows: MSI ----------
@@ -119,6 +119,6 @@ jobs:
 
             | Platform | File |
             | --- | --- |
-            | Linux (AppImage) | `croc-gui_${{ github.ref_name }}_linux-amd64.AppImage` |
-            | macOS (Apple Silicon) | `croc-gui_${{ github.ref_name }}_darwin-arm64.dmg` |
-            | Windows (MSI) | `croc-gui_${{ github.ref_name }}_windows-amd64.msi` |
+            | Linux (AppImage) | `croc-desktop_${{ github.ref_name }}_linux-amd64.AppImage` |
+            | macOS (Apple Silicon) | `croc-desktop_${{ github.ref_name }}_darwin-arm64.dmg` |
+            | Windows (MSI) | `croc-desktop_${{ github.ref_name }}_windows-amd64.msi` |

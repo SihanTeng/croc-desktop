@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { App as Backend, copyToClipboard, formatBytes, ReceivedFile } from "../api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { App as Backend, copyToClipboard, formatBytes, ReceivedFile, Settings } from "../api";
 import { decodeDataUrlText, maxTextPreview, previewKind } from "../filepreview";
 import { TransferModel } from "../useTransfer";
+import { useT } from "../i18n";
 import { StatusCard } from "./SendView";
 
 function errMsg(e: unknown): string {
@@ -12,6 +13,7 @@ function errMsg(e: unknown): string {
 // ReceivedFileCard shows a received file with a best-effort inline preview
 // (image/video/audio/text) and falls back to a plain name+size row.
 function ReceivedFileCard({ file }: { file: ReceivedFile }) {
+  const t = useT();
   const kind = previewKind(file.name);
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -36,7 +38,7 @@ function ReceivedFileCard({ file }: { file: ReceivedFile }) {
       {kind === "text" && dataUrl && <TextPreview dataUrl={dataUrl} />}
       <p className="hint break-all recv-name" title={file.path}>
         {file.name} · {formatBytes(file.size)}
-        {failed && " (preview unavailable)"}
+        {failed && ` ${t("receive.previewUnavailable")}`}
       </p>
     </div>
   );
@@ -55,13 +57,16 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
   const [copied, setCopied] = useState(false);
   const [imgMsg, setImgMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [imgBusy, setImgBusy] = useState(false);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const viewRef = useRef<HTMLDivElement>(null);
+  const t = useT();
 
   const active = transfer.direction === "receive" && transfer.phase !== "idle";
 
   useEffect(() => {
     Backend.GetSettings()
       .then((s) => {
+        setSettings(s);
         if (s.downloadDir) return s.downloadDir;
         return Backend.GetDefaultDownloadDir();
       })
@@ -69,19 +74,48 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
       .catch(() => {});
   }, []);
 
-  const decodeImage = async (data: string) => {
-    setImgBusy(true);
-    setImgMsg(null);
+  const savedCodes = settings?.savedCodes ?? [];
+
+  const saveCode = async () => {
+    if (!settings) return;
+    const c = code.trim();
+    if (c.length < 6 || savedCodes.some((x) => x.code === c)) return;
+    const next = { ...settings, savedCodes: [...savedCodes, { name: c, code: c }] };
     try {
-      const decoded = await Backend.DecodeCodeFromBase64(data);
-      setCode(decoded);
-      setImgMsg({ kind: "ok", text: "Code read from image." });
-    } catch (e) {
-      setImgMsg({ kind: "err", text: errMsg(e) });
-    } finally {
-      setImgBusy(false);
+      await Backend.SaveSettings(next);
+      setSettings(next);
+    } catch {
+      /* settings validation errors surface in Settings view */
     }
   };
+
+  const removeCode = async (c: string) => {
+    if (!settings) return;
+    const next = { ...settings, savedCodes: savedCodes.filter((x) => x.code !== c) };
+    try {
+      await Backend.SaveSettings(next);
+      setSettings(next);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const decodeImage = useCallback(
+    async (data: string) => {
+      setImgBusy(true);
+      setImgMsg(null);
+      try {
+        const decoded = await Backend.DecodeCodeFromBase64(data);
+        setCode(decoded);
+        setImgMsg({ kind: "ok", text: t("receive.codeRead") });
+      } catch (e) {
+        setImgMsg({ kind: "err", text: errMsg(e) });
+      } finally {
+        setImgBusy(false);
+      }
+    },
+    [t]
+  );
 
   // Paste a screenshot of the sender's QR code anywhere in the app — the
   // code is extracted in the background; the image itself is never shown.
@@ -104,7 +138,7 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, []);
+  }, [decodeImage]);
 
   const chooseImage = async () => {
     setImgMsg(null);
@@ -115,7 +149,7 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
       try {
         const decoded = await Backend.DecodeCodeFromFile(path);
         setCode(decoded);
-        setImgMsg({ kind: "ok", text: "Code read from image." });
+        setImgMsg({ kind: "ok", text: t("receive.codeRead") });
       } finally {
         setImgBusy(false);
       }
@@ -159,18 +193,18 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
       transfer.phase === "done" ? (
         transfer.result?.isText ? (
           <div>
-            <p className="status status-ok">Text message received:</p>
+            <p className="status status-ok">{t("receive.textReceived")}</p>
             <pre className="received-text">{transfer.result.text}</pre>
             <div className="btn-row">
               <button className="btn btn-ghost btn-sm" onClick={copyText}>
-                {copied ? "Copied!" : "Copy text"}
+                {copied ? t("common.copied") : t("receive.copyText")}
               </button>
             </div>
           </div>
         ) : (
           <div>
-            <p className="status status-ok">Transfer complete.</p>
-            <p className="hint break-all">Saved to {outDir}</p>
+            <p className="status status-ok">{t("status.complete")}</p>
+            <p className="hint break-all">{t("receive.savedTo", { dir: outDir })}</p>
             {transfer.result?.files && transfer.result.files.length > 0 && (
               <div className="recv-files">
                 {transfer.result.files.map((f) => (
@@ -184,7 +218,7 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
 
     return (
       <div className="view">
-        <h2 className="view-title">Receive</h2>
+        <h2 className="view-title">{t("receive.title")}</h2>
         <StatusCard
           transfer={transfer}
           onCancel={() => Backend.CancelTransfer()}
@@ -194,7 +228,7 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
           transfer.phase === "error" ||
           transfer.phase === "cancelled") && (
           <button className="btn btn-primary" onClick={transfer.reset}>
-            Receive another
+            {t("receive.another")}
           </button>
         )}
       </div>
@@ -203,12 +237,12 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
 
   return (
     <div className="view" ref={viewRef}>
-      <h2 className="view-title">Receive</h2>
+      <h2 className="view-title">{t("receive.title")}</h2>
       <label className="field">
-        <span className="field-label">Code phrase</span>
+        <span className="field-label">{t("receive.codeLabel")}</span>
         <input
           className="input code-input"
-          placeholder="Code, croc command, or link"
+          placeholder={t("receive.codePlaceholder")}
           value={code}
           onChange={(e) => setCode(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && code.trim() && start()}
@@ -216,10 +250,39 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
         />
       </label>
 
+      <div className="saved-row">
+        <button
+          className="btn btn-ghost btn-sm"
+          disabled={code.trim().length < 6 || savedCodes.some((x) => x.code === code.trim())}
+          onClick={saveCode}
+          title={t("receive.saveCodeTitle")}
+        >
+          {t("receive.saveCode")}
+        </button>
+        {savedCodes.length > 0 && (
+          <div className="chips">
+            {savedCodes.map((sc) => (
+              <span className="chip" key={sc.code}>
+                <button className="chip-pick" title={sc.code} onClick={() => setCode(sc.code)}>
+                  {sc.name}
+                </button>
+                <button
+                  className="chip-x"
+                  onClick={() => removeCode(sc.code)}
+                  aria-label={t("receive.removeCode", { name: sc.name })}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="qr-row">
-        <span className="hint">QR screenshot? Paste it (Ctrl+V) or</span>
+        <span className="hint">{t("receive.qrHint")}</span>
         <button className="btn btn-ghost btn-sm" onClick={chooseImage} disabled={imgBusy}>
-          {imgBusy ? "Reading…" : "Choose image…"}
+          {imgBusy ? t("receive.reading") : t("receive.chooseImage")}
         </button>
       </div>
       {imgMsg && (
@@ -227,11 +290,11 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
       )}
 
       <label className="field">
-        <span className="field-label">Save to</span>
+        <span className="field-label">{t("receive.saveTo")}</span>
         <div className="input-row">
           <input className="input" value={outDir} onChange={(e) => setOutDir(e.target.value)} />
           <button className="btn btn-ghost" onClick={browse}>
-            Browse…
+            {t("common.browse")}
           </button>
         </div>
       </label>
@@ -243,7 +306,7 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
         disabled={starting || code.trim().length < 6}
         onClick={start}
       >
-        {starting ? "Connecting…" : "Receive"}
+        {starting ? t("receive.connecting") : t("receive.receive")}
       </button>
     </div>
   );

@@ -19,7 +19,7 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:     "croc",
+		Title:     "croc-desktop",
 		Width:     1024,
 		Height:    720,
 		MinWidth:  820,
@@ -33,9 +33,9 @@ func main() {
 		Linux: &linux.Options{
 			Icon: appIcon,
 			// the Wayland app_id is derived from the prgname; pinning it makes
-			// the window match croc-gui.desktop (and its icon) regardless of
+			// the window match croc-desktop.desktop (and its icon) regardless of
 			// the binary name, e.g. the wails-dev binary
-			ProgramName: "croc-gui",
+			ProgramName: "croc-desktop",
 		},
 		Bind: []interface{}{
 			app,

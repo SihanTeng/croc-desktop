@@ -1,5 +1,5 @@
 {
-  "name": "croc-gui-e2e",
+  "name": "croc-desktop-e2e",
   "private": true,
   "type": "module",
   "scripts": {

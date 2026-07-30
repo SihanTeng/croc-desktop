@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/schollz/croc/v10/src/comm"
@@ -12,21 +14,35 @@ import (
 	"github.com/schollz/croc/v10/src/utils"
 )
 
+// SavedCode is a remembered receive code (favorite), managed from the
+// Receive view.
+type SavedCode struct {
+	Name string `json:"name"`
+	Code string `json:"code"`
+}
+
 // Settings holds the user-configurable options shown in the Settings view.
 // It maps onto croc.Options; see buildCrocOptions.
 type Settings struct {
-	RelayAddress  string `json:"relayAddress"`
-	RelayAddress6 string `json:"relayAddress6"`
-	RelayPassword string `json:"relayPassword"`
-	Curve         string `json:"curve"`
-	HashAlgorithm string `json:"hashAlgorithm"`
-	OnlyLocal     bool   `json:"onlyLocal"`
-	DisableLocal  bool   `json:"disableLocal"`
-	NoCompress    bool   `json:"noCompress"`
-	Overwrite     bool   `json:"overwrite"`
-	DownloadDir   string `json:"downloadDir"`
-	Socks5        string `json:"socks5"`
-	HttpProxy     string `json:"httpProxy"`
+	RelayAddress   string      `json:"relayAddress"`
+	RelayAddress6  string      `json:"relayAddress6"`
+	RelayPassword  string      `json:"relayPassword"`
+	Curve          string      `json:"curve"`
+	HashAlgorithm  string      `json:"hashAlgorithm"`
+	OnlyLocal      bool        `json:"onlyLocal"`
+	DisableLocal   bool        `json:"disableLocal"`
+	NoCompress     bool        `json:"noCompress"`
+	Overwrite      bool        `json:"overwrite"`
+	DownloadDir    string      `json:"downloadDir"`
+	Socks5         string      `json:"socks5"`
+	HttpProxy      string      `json:"httpProxy"`
+	ZipFolder      bool        `json:"zipFolder"`
+	Exclude        string      `json:"exclude"`
+	ThrottleUpload string      `json:"throttleUpload"`
+	IP             string      `json:"ip"`
+	Theme          string      `json:"theme"`    // system | light | dark
+	Language       string      `json:"language"` // system | <locale>, e.g. en, zh-CN
+	SavedCodes     []SavedCode `json:"savedCodes,omitempty"`
 }
 
 var settingsMu sync.Mutex
@@ -46,7 +62,7 @@ func settingsFile() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "croc-gui.json"), nil
+	return filepath.Join(dir, "croc-desktop.json"), nil
 }
 
 func loadSettings() Settings {
@@ -57,7 +73,11 @@ func loadSettings() Settings {
 	}
 	b, err := os.ReadFile(f)
 	if err != nil {
-		return s
+		// fall back to the pre-rename settings file once
+		legacy := filepath.Join(filepath.Dir(f), "croc-gui.json")
+		if b, err = os.ReadFile(legacy); err != nil {
+			return s
+		}
 	}
 	// keep defaults for anything missing from the file
 	_ = json.Unmarshal(b, &s)
@@ -89,6 +109,26 @@ func applyProxySettings(s Settings) {
 	comm.HttpProxy = s.HttpProxy
 }
 
+// throttleRe matches croc's upload-limit syntax: a number with an optional
+// k/m/g (kilobytes..gigabytes per second) suffix. croc panics on anything
+// else, so invalid values are dropped here instead.
+var throttleRe = regexp.MustCompile(`^\d+[kKmMgG]?$`)
+
+func validThrottle(s string) bool {
+	return s == "" || throttleRe.MatchString(strings.TrimSpace(s))
+}
+
+// splitExclude turns the comma-separated exclude setting into patterns.
+func splitExclude(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // buildCrocOptions maps Settings onto croc.Options, mirroring the CLI wiring
 // in src/cli/cli.go. Relay ports follow the CLI default (base 9009, 4 transfer
 // ports).
@@ -105,8 +145,14 @@ func buildCrocOptions(s Settings, isSender bool) croc.Options {
 		DisableLocal:     s.DisableLocal,
 		NoCompress:       s.NoCompress,
 		Overwrite:        s.Overwrite,
+		ZipFolder:        s.ZipFolder,
+		Exclude:          splitExclude(s.Exclude),
+		IP:               s.IP,
 		NoPrompt:         true,
 		DisableClipboard: true,
+	}
+	if validThrottle(s.ThrottleUpload) {
+		opts.ThrottleUpload = s.ThrottleUpload
 	}
 	if opts.RelayPassword == "" {
 		opts.RelayPassword = models.DEFAULT_PASSPHRASE

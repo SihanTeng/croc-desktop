@@ -1,5 +1,6 @@
 import { AcceptPayload, OverwritePayload, formatBytes } from "../api";
 import { Modal } from "./Modal";
+import { useT } from "../i18n";
 
 const MAX_LISTED = 8;
 
@@ -10,25 +11,26 @@ export function AcceptModal({
   payload: AcceptPayload;
   onRespond: (accept: boolean) => void;
 }) {
+  const t = useT();
   const extra = payload.files.length - MAX_LISTED;
   return (
     <Modal
-      title={payload.isText ? "Incoming text message" : "Incoming files"}
+      title={payload.isText ? t("modal.incomingText") : t("modal.incomingFiles")}
       footer={
         <>
           <button className="btn btn-ghost" onClick={() => onRespond(false)}>
-            Decline
+            {t("modal.decline")}
           </button>
           <button className="btn btn-primary" onClick={() => onRespond(true)}>
-            Accept
+            {t("modal.accept")}
           </button>
         </>
       }
     >
       <p className="modal-sub">
-        From <code>{payload.senderId || "unknown"}</code>
+        {t("modal.from")} <code>{payload.senderId || t("modal.unknown")}</code>
         {payload.totalFolders > 0 &&
-          ` · ${payload.totalFolders} folder${payload.totalFolders > 1 ? "s" : ""}`}
+          ` · ${payload.totalFolders === 1 ? t("modal.folder") : t("modal.folders", { n: payload.totalFolders })}`}
         {" · "}
         {formatBytes(payload.totalSize)}
       </p>
@@ -43,7 +45,7 @@ export function AcceptModal({
               <span className="file-size">{formatBytes(f.size)}</span>
             </li>
           ))}
-          {extra > 0 && <li className="file-more">…and {extra} more</li>}
+          {extra > 0 && <li className="file-more">{t("history.andMore", { n: extra })}</li>}
         </ul>
       )}
     </Modal>
@@ -57,24 +59,27 @@ export function OverwriteModal({
   payload: OverwritePayload;
   onRespond: (overwrite: boolean) => void;
 }) {
+  const t = useT();
   const isResume = payload.resumePct < 99;
   return (
     <Modal
-      title={isResume ? "Resume transfer?" : "Overwrite file?"}
+      title={isResume ? t("modal.resumeTitle") : t("modal.overwriteTitle")}
       footer={
         <>
           <button className="btn btn-ghost" onClick={() => onRespond(false)}>
-            Skip
+            {t("modal.skip")}
           </button>
           <button className="btn btn-primary" onClick={() => onRespond(true)}>
-            {isResume ? "Resume" : "Overwrite"}
+            {isResume ? t("modal.resume") : t("modal.overwrite")}
           </button>
         </>
       }
     >
       <p className="modal-sub break-all">{payload.path}</p>
       {isResume && (
-        <p className="modal-sub">{payload.resumePct.toFixed(1)}% is already present locally.</p>
+        <p className="modal-sub">
+          {t("modal.percentPresent", { pct: payload.resumePct.toFixed(1) })}
+        </p>
       )}
     </Modal>
   );
