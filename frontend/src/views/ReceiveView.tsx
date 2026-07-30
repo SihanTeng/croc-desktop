@@ -3,6 +3,7 @@ import { App as Backend, copyToClipboard, Settings } from "../api";
 import { TransferModel } from "../useTransfer";
 import { useT } from "../i18n";
 import { FileRow } from "../components/FileRow";
+import CameraScan from "../components/CameraScan";
 import { StatusCard } from "./SendView";
 
 function errMsg(e: unknown): string {
@@ -18,6 +19,7 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
   const [copied, setCopied] = useState(false);
   const [imgMsg, setImgMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [imgBusy, setImgBusy] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const viewRef = useRef<HTMLDivElement>(null);
   const t = useT();
@@ -116,6 +118,20 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
       }
     } catch (e) {
       setImgMsg({ kind: "err", text: errMsg(e) });
+    }
+  };
+
+  const onCameraCode = async (raw: string) => {
+    setCameraOpen(false);
+    setImgMsg(null);
+    try {
+      // QR text may be a bare code or a full "croc …" / link — normalize
+      const normalized = await Backend.NormalizeCode(raw);
+      setCode(normalized);
+      setImgMsg({ kind: "ok", text: t("receive.codeRead") });
+    } catch {
+      setCode(raw.trim());
+      setImgMsg({ kind: "ok", text: t("receive.codeRead") });
     }
   };
 
@@ -242,13 +258,33 @@ export default function ReceiveView({ transfer }: { transfer: TransferModel }) {
 
       <div className="qr-row">
         <span className="hint">{t("receive.qrHint")}</span>
-        <button className="btn btn-ghost btn-sm" onClick={chooseImage} disabled={imgBusy}>
-          {imgBusy ? t("receive.reading") : t("receive.chooseImage")}
-        </button>
+        <div className="btn-row qr-actions">
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setImgMsg(null);
+              setCameraOpen(true);
+            }}
+            disabled={imgBusy}
+          >
+            {t("receive.scanCamera")}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={chooseImage}
+            disabled={imgBusy}
+          >
+            {imgBusy ? t("receive.reading") : t("receive.chooseImage")}
+          </button>
+        </div>
       </div>
       {imgMsg && (
         <p className={imgMsg.kind === "err" ? "error-text" : "hint qr-hint"}>{imgMsg.text}</p>
       )}
+
+      {cameraOpen && <CameraScan onCode={onCameraCode} onClose={() => setCameraOpen(false)} />}
 
       <label className="field">
         <span className="field-label">{t("receive.saveTo")}</span>

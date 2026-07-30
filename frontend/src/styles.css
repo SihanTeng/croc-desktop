@@ -1136,11 +1136,87 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  flex-wrap: wrap;
 }
 
 .qr-row .hint,
 .qr-hint {
   text-align: left;
+}
+
+.qr-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+/* ---------- camera QR scanner ---------- */
+
+.camera-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  background: oklch(12% 0.01 260);
+  padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0)
+    env(safe-area-inset-left, 0);
+}
+
+.camera-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #000;
+}
+
+.camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-frame {
+  position: absolute;
+  inset: 18% 12%;
+  border: 2px solid color-mix(in oklab, var(--color-accent) 80%, white);
+  border-radius: var(--radius-card);
+  box-shadow: 0 0 0 9999px oklch(0% 0 0 / 0.45);
+  pointer-events: none;
+}
+
+.camera-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  max-width: min(28rem, 90%);
+  margin: 0;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-pill);
+  background: oklch(0% 0 0 / 0.55);
+  color: oklch(96% 0.01 250);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.camera-banner-err {
+  background: color-mix(in oklab, var(--color-error) 75%, black);
+}
+
+.camera-actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: oklch(12% 0.01 260);
+}
+
+.camera-actions .btn {
+  min-width: 8rem;
 }
 
 /* ---------- relay ---------- */
