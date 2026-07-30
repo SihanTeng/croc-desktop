@@ -15,6 +15,7 @@ includes:
   windows: ./build/windows/Taskfile.yml
   darwin: ./build/darwin/Taskfile.yml
   linux: ./build/linux/Taskfile.yml
+  # Mobile Taskfiles expose ios:* and android:* (do not redeclare those names here).
   ios: ./build/ios/Taskfile.yml
   android: ./build/android/Taskfile.yml
 
@@ -48,29 +49,7 @@ tasks:
     cmds:
       - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
 
-  # ---- mobile (Wails v3) ----
-  # Requires platform SDKs: full Xcode for iOS; Android SDK + NDK for Android.
-  # See https://v3.wails.io and build/ios, build/android Taskfiles.
-
-  ios:run:
-    summary: Build and launch on the iOS Simulator
-    cmds:
-      - task: ios:run
-
-  ios:package:
-    summary: Package an iOS .app (simulator by default; IOS_PLATFORM=device for devices)
-    cmds:
-      - task: ios:package
-        vars:
-          IOS_PLATFORM: '{{.IOS_PLATFORM | default "simulator"}}'
-          CODESIGN_IDENTITY: '{{.CODESIGN_IDENTITY | default "-"}}'
-
-  android:run:
-    summary: Build, install, and launch on the Android emulator/device
-    cmds:
-      - task: android:run
-
-  android:package:
-    summary: Package a release Android APK/AAB
-    cmds:
-      - task: android:package
+  # Mobile: use included tasks directly, e.g.
+  #   wails3 task ios:run
+  #   wails3 task android:run
+  #   wails3 task ios:package IOS_PLATFORM=device CODESIGN_IDENTITY="…"
