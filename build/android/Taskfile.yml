@@ -4,7 +4,8 @@ includes:
   common: ../Taskfile.yml
 
 vars:
-  APP_ID: '{{.APP_ID | default "com.schollz.croc-desktop"}}'
+  # No hyphens — Android package names must be valid Java identifiers.
+  APP_ID: '{{.APP_ID | default "com.schollz.crocdesktop"}}'
   MIN_SDK: '21'
   TARGET_SDK: '35'
   # The emulator runs the host architecture; physical devices are arm64

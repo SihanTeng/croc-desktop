@@ -131,7 +131,7 @@ wails3 task android:run                      # emulator or adb device
 | | Value |
 | --- | --- |
 | iOS bundle ID | `com.schollz.croc-desktop` |
-| Android applicationId | `com.schollz.croc-desktop` |
+| Android applicationId | `com.schollz.crocdesktop` (no hyphens) |
 | Config | [`build/config.yml`](build/config.yml) (`ios:` block) |
 | Platform hooks | [`app_options_ios.go`](app_options_ios.go), [`app_options_android.go`](app_options_android.go) |
 
