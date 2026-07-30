@@ -14,13 +14,13 @@ import Logo from "./components/Logo";
 
 type Tab = "send" | "receive" | "history" | "logs" | "relay" | "settings";
 
-const tabs: { id: Tab; labelKey: string; shortKey: string; icon: string }[] = [
-  { id: "send", labelKey: "app.send", shortKey: "app.send", icon: "send" },
-  { id: "receive", labelKey: "app.receive", shortKey: "app.receive", icon: "receive" },
-  { id: "history", labelKey: "app.history", shortKey: "app.history", icon: "history" },
-  { id: "logs", labelKey: "app.logs", shortKey: "app.logs", icon: "logs" },
-  { id: "relay", labelKey: "app.relay", shortKey: "app.relay", icon: "relay" },
-  { id: "settings", labelKey: "app.settings", shortKey: "app.settings", icon: "settings" },
+const tabs: { id: Tab; labelKey: string; icon: string }[] = [
+  { id: "send", labelKey: "app.send", icon: "send" },
+  { id: "receive", labelKey: "app.receive", icon: "receive" },
+  { id: "history", labelKey: "app.history", icon: "history" },
+  { id: "logs", labelKey: "app.logs", icon: "logs" },
+  { id: "relay", labelKey: "app.relay", icon: "relay" },
+  { id: "settings", labelKey: "app.settings", icon: "settings" },
 ];
 
 function TabIcon({ name }: { name: string }) {
@@ -187,7 +187,7 @@ export default function App() {
             <span className="nav-icon" aria-hidden="true">
               <TabIcon name={item.icon} />
             </span>
-            <span className="bottom-nav-label">{t(item.shortKey)}</span>
+            <span className="bottom-nav-label">{t(item.labelKey)}</span>
           </button>
         ))}
       </nav>

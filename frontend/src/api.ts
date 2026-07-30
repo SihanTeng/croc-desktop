@@ -96,8 +96,10 @@ export const App: WailsApp = new Proxy(previewStub, {
   },
 }) as unknown as WailsApp;
 
-// Expose bindings + a thin runtime bridge for Playwright E2E helpers that
-// call window.go.main.App and window.runtime.EventsEmit.
+// E2E bridge: Playwright helpers (and older snippets) call window.go.main.App
+// and window.runtime.* — the v2 surface. Production UI uses App / onEvent /
+// copyToClipboard above, which talk to v3 bindings and @wailsio/runtime.
+// Keep this shim until e2e/ is updated to import bindings directly.
 if (typeof window !== "undefined") {
   (window as any).go = { main: { App: AppBindings } };
   (window as any).runtime = {

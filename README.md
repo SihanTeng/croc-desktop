@@ -5,8 +5,9 @@
 <h1 align="center">croc-desktop</h1>
 
 <p align="center">
-  <strong>Desktop GUI for <a href="https://github.com/schollz/croc">croc</a></strong> — encrypted,
-  peer-to-peer file and text transfer on <strong>Linux, macOS, and Windows</strong>.
+  <strong>GUI for <a href="https://github.com/schollz/croc">croc</a></strong> — encrypted,
+  peer-to-peer file and text transfer on <strong>Linux, macOS, Windows</strong>
+  (desktop) and experimental <strong>iOS / Android</strong> via Wails v3.
   No cloud upload. No terminal required.
 </p>
 
@@ -61,6 +62,7 @@ events, relay hosting, and accurate transfer state.
 - Dark theme (system-following or pinned)
 - Multi-language UI (English, 简体中文, 繁體中文, Español, Français, Deutsch,
   日本語) — see *Contributing translations*
+- Responsive layout: side rail on desktop, bottom tabs on narrow / mobile screens
 
 <p align="center">
   <img src="docs/images/history.png" alt="History tab" width="49%" />
@@ -82,30 +84,42 @@ Download from [Releases](https://github.com/SihanTeng/croc-desktop/releases):
 Prerequisites: Go (see `go.mod`), Node.js + npm, the Wails v3 CLI, and
 platform webview deps (`wails3 doctor`).
 
+This repo tracks **Wails `v3.0.0-alpha2.119`** (see `go.mod`). Prefer the same
+CLI version for reproducible builds:
+
 ```sh
-# Install the CLI (use -tags gtk3 on Linux if you have webkit2gtk 4.1 but not gtk4)
-go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@latest
+# Linux: install CLI with gtk3 if you have webkit2gtk 4.1 but not gtk4
+go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.119
 
-# Linux: GTK3 + webkit2gtk 4.1 (this project’s default), e.g.
+# Linux webview deps (project default = gtk3 / webkit2gtk 4.1), e.g.
 #   webkit2gtk4.1-devel on Fedora, libwebkit2gtk-4.1-dev on Debian/Ubuntu
-# Optional native gtk4 path: install gtk4 + webkitgtk 6 and build with EXTRA_TAGS=
+# Optional gtk4 path: install gtk4 + webkitgtk 6 and build with EXTRA_TAGS=
 
-WEBKIT_DISABLE_DMABUF_RENDERER=1 wails3 dev   # or: task dev
+WEBKIT_DISABLE_DMABUF_RENDERER=1 wails3 dev -config ./build/config.yml -port 34115
+# or: task dev
 ```
 
 (`WEBKIT_DISABLE_DMABUF_RENDERER=1` works around a WebKitGTK crash on some
 Wayland compositors.)
 
-Dev mode loads the Vite server (default port **34115** for this project) and
-rebuilds Go on change. Frontend bindings live under `frontend/bindings/` and
-are regenerated during `wails3 build` / `wails3 generate bindings`.
+Dev mode loads the Vite server (port **34115**) and rebuilds Go on change.
+Frontend bindings live under `frontend/bindings/` and are regenerated during
+`wails3 build` / `wails3 generate bindings -ts`.
+
+On Linux, unit tests and the app must use the **gtk3** build tag when gtk4
+is not installed:
+
+```sh
+go test -tags gtk3 .
+go build -tags gtk3 -o bin/croc-desktop .
+```
 
 ## Build
 
 ```sh
 wails3 build -tags gtk3   # Linux with webkit2gtk 4.1 (default for this repo)
 # or: task build
-# binary lands in bin/croc-desktop
+# binary lands in bin/croc-desktop  (not build/bin/)
 ```
 
 On macOS/Windows, omit the gtk3 tag (`wails3 build`). For Linux with gtk4 +
@@ -113,25 +127,27 @@ webkitgtk 6 installed: `EXTRA_TAGS= wails3 build`.
 
 ## Mobile (iOS / Android)
 
-Wails v3 builds the same Go + React app for mobile. The UI is responsive:
-desktop keeps the left side-rail; below ~720px (phones and the mobile
-webview) it switches to a bottom tab bar with safe-area padding.
+Wails v3 can build the same Go + React app for mobile. Support is still
+**alpha** (needs full Xcode for iOS; Android SDK + NDK for Android). The UI is
+responsive: desktop keeps the left side-rail; below ~720px it switches to a
+bottom tab bar with safe-area padding.
 
-Scaffold lives under `build/ios/` and `build/android/`. You need the platform
-SDKs (`wails3 doctor` reports what it can see).
+Scaffold lives under `build/ios/` and `build/android/`. Platform option hooks
+are `app_options_*.go` in the module root (`//go:build ios|android`).
 
 ```sh
 # iOS Simulator (requires full Xcode on macOS)
 wails3 task ios:run
-# or: task ios:package IOS_PLATFORM=device CODESIGN_IDENTITY="Apple Development: …"
+# device: task ios:package IOS_PLATFORM=device CODESIGN_IDENTITY="Apple Development: …"
 
-# Android emulator / device (requires Android SDK + NDK)
+# Android emulator / device
 wails3 task android:run
 ```
 
-Bundle / application IDs default to `com.schollz.croc-desktop` (see
-`build/config.yml` and the platform Taskfiles). Resize the desktop window
-down to ~360px wide to preview the mobile chrome without a device.
+- iOS bundle ID / Android `applicationId`: **`com.schollz.croc-desktop`**
+- Android Java package for the Wails bridge remains `com.wails.app` (upstream
+  scaffold); only the Play Store id is product-branded.
+- Resize the desktop window to ~360px wide to preview mobile chrome without a device.
 
 ## Test
 
@@ -157,6 +173,21 @@ Three layers:
 
 Frontend checks: `npm --prefix frontend run typecheck && npm --prefix frontend run lint`.
 
+## Data paths & upgrades
+
+Settings and history live in the croc config directory (same as the CLI;
+overridable with `CROC_CONFIG_DIR`):
+
+| File | Purpose |
+| --- | --- |
+| `croc-desktop.json` | Settings (theme, relay, favorites, …) |
+| `croc-desktop-history.json` | Transfer history |
+
+**Backward compatibility:** if the new file is missing, the app still loads
+the pre-rename names (`croc-gui.json`, `croc-gui-history.json`) and writes
+the data under the current names on first use. Existing installs keep their
+settings and history after upgrading.
+
 ## Contributing translations
 
 UI strings live in plain JSON files under `frontend/src/i18n/locales/`
@@ -167,6 +198,9 @@ and the `{placeholder}` variables intact.
 
 ## How it works
 
+- Built with **Wails v3**: Go services bound to the frontend, events via
+  `app.Event.Emit`, dialogs via `app.Dialog`, assets embedded from
+  `frontend/dist`.
 - `src/croc/hooks.go` (in the croc module) defines `croc.Hooks` —
   progress/state/prompt callbacks installed via `Client.SetHooks`. With hooks
   set, the terminal progress bar is silenced and stdin prompts
@@ -178,7 +212,6 @@ and the `{placeholder}` variables intact.
 - `history.go` persists transfer history and `logger.go` the centralized
   leveled log (both in-process; history on disk next to settings).
 - `relay.go` wraps `tcp.RunCtx` for in-app relays.
-- Settings persist to `<croc config dir>/croc-desktop.json`.
 
 This is a separate Go module so the CLI's dependency set stays untouched.
 croc is consumed as a plain module dependency — no sibling checkout needed:
@@ -202,8 +235,10 @@ hooks land upstream in `schollz/croc`, the `replace` line can be deleted.
 
 ## CI & releases
 
-- **CI** (`ci.yml`, every push/PR): golangci-lint, gofmt, `go vet`, `go test`;
-  frontend prettier, eslint, `tsc --noEmit`, vite build.
+- **CI** (`ci.yml`, every push/PR): golangci-lint, gofmt, `go vet`, `go test`
+  (all with `-tags gtk3` on Linux); frontend prettier, eslint, `tsc`, vitest,
+  vite build; Playwright E2E.
 - **Release** (`release.yml`, tags `v*` or manual dispatch): matrix build
   producing the AppImage / DMG / MSI above, with the tag in the file names,
-  attached to the GitHub Release with a downloads table.
+  attached to the GitHub Release with a downloads table. Linux uses
+  `wails3 build -tags gtk3`; binary path is `bin/`.

@@ -30,7 +30,9 @@ else
   SANDBOX="$(mktemp -d)"
   export E2E_RELAY="127.0.0.1:$RELAY_BASE"
   mkdir -p "$SANDBOX/config"
-  cat > "$SANDBOX/config/croc-gui.json" <<JSON
+  # settings file name matches settings.go (croc-desktop.json); the load
+  # path still accepts legacy croc-gui.json for upgraded installs
+  cat > "$SANDBOX/config/croc-desktop.json" <<JSON
 {"relayAddress":"127.0.0.1:$RELAY_BASE","relayPassword":"pass123","disableLocal":true,"curve":"p256","hashAlgorithm":"xxhash"}
 JSON
   (cd .. && go run ./e2e/peers relay "$RELAY_BASE") &

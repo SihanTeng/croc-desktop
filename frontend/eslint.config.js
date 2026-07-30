@@ -3,7 +3,7 @@ import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 
 export default tseslint.config(
-  { ignores: ["dist", "wailsjs", "bindings", "node_modules", ".vite"] },
+  { ignores: ["dist", "bindings", "node_modules", ".vite"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

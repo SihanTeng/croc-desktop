@@ -11,7 +11,9 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.wails.app"
+        // Product id (Play Store / package name). Java namespace stays
+        // com.wails.app — that is the Wails Android bridge package.
+        applicationId "com.schollz.croc-desktop"
         minSdk 21
         targetSdk 35
         versionCode 1

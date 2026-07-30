@@ -1,8 +1,9 @@
 # Browser E2E tests
 
-End-to-end tests that drive the real app UI in Chromium (via the Wails dev
-server's browser bridge) while throwaway croc peers (`peers/`) play the other
-end of each transfer.
+End-to-end tests that drive the real app UI in Chromium (via the Wails v3
+dev server's Vite bridge) while throwaway croc peers (`peers/`) play the other
+end of each transfer. Specs call `window.go.main.App` / `window.runtime`,
+which the frontend exposes as a thin compatibility bridge over v3 bindings.
 
 ## Run
 

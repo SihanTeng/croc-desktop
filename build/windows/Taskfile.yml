@@ -141,7 +141,7 @@ tasks:
     cmds:
       - |-
         wails3 tool msix \
-          --config "{{.ROOT_DIR}}/wails.json" \
+          --config "{{.ROOT_DIR}}/build/config.yml" \
           --name "{{.APP_NAME}}" \
           --executable "{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" \
           --arch "{{.ARCH}}" \

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -29,6 +30,34 @@ func TestSettingsRoundTrip(t *testing.T) {
 	got := loadSettings()
 	if !reflect.DeepEqual(got, s) {
 		t.Fatalf("round trip mismatch:\n got %+v\nwant %+v", got, s)
+	}
+}
+
+// Upgrades from the pre-rename config file must keep working and migrate
+// onto croc-desktop.json so later loads do not depend on the legacy path.
+func TestSettingsLegacyMigration(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CROC_CONFIG_DIR", dir)
+
+	legacy := filepath.Join(dir, "croc-gui.json")
+	if err := os.WriteFile(legacy, []byte(`{"curve":"p384","theme":"dark"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := loadSettings()
+	if s.Curve != "p384" || s.Theme != "dark" {
+		t.Fatalf("legacy settings not loaded: %+v", s)
+	}
+	// current name should now exist
+	current := filepath.Join(dir, "croc-desktop.json")
+	if _, err := os.Stat(current); err != nil {
+		t.Fatalf("expected migration write to %s: %v", current, err)
+	}
+	// loading again should not require the legacy file
+	_ = os.Remove(legacy)
+	s2 := loadSettings()
+	if s2.Curve != "p384" || s2.Theme != "dark" {
+		t.Fatalf("post-migration load failed: %+v", s2)
 	}
 }
 
