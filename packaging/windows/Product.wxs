@@ -3,7 +3,7 @@
   <Product Id="*"
            Name="croc"
            Language="1033"
-           Version="0.1.0.0"
+           Version="0.2.0.0"
            Manufacturer="croc"
            UpgradeCode="8fca5e75-eb3b-4dcf-b7cc-c482df60c3fc">
 
