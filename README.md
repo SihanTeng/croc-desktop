@@ -9,9 +9,14 @@
 </p>
 
 <p align="center">
-  A friendly desktop app for
+  A friendly app for
   <a href="https://github.com/schollz/croc">croc</a>:
-  end-to-end encrypted, peer-to-peer transfer on Linux, macOS, and Windows.
+  end-to-end encrypted, peer-to-peer transfer.
+  <br />
+  <b>Desktop:</b> Linux · macOS · Windows &nbsp;·&nbsp;
+  <b>Mobile:</b> iOS · Android
+  <br />
+  <sub>Built with <a href="https://v3.wails.io">Wails v3</a> (not v2)</sub>
 </p>
 
 <p align="center">
@@ -19,13 +24,16 @@
   &nbsp;
   <a href="https://github.com/SihanTeng/croc-desktop/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/SihanTeng/croc-desktop/ci.yml?branch=main&style=for-the-badge&label=CI" alt="CI" /></a>
   &nbsp;
-  <img src="https://img.shields.io/badge/Linux-macOS-Windows-1F6FEB?style=for-the-badge" alt="Platforms" />
+  <img src="https://img.shields.io/badge/Desktop-Linux%20%7C%20macOS%20%7C%20Windows-1F6FEB?style=for-the-badge" alt="Desktop platforms" />
   &nbsp;
-  <img src="https://img.shields.io/badge/built%20with-Wails%20v3-DF3A2C?style=for-the-badge" alt="Wails v3" />
+  <img src="https://img.shields.io/badge/Mobile-iOS%20%7C%20Android-0E8A16?style=for-the-badge" alt="Mobile platforms" />
+  &nbsp;
+  <a href="https://v3.wails.io"><img src="https://img.shields.io/badge/Wails-v3-DF3A2C?style=for-the-badge" alt="Wails v3" /></a>
 </p>
 
 <p align="center">
-  <a href="#-install">Install</a> ·
+  <a href="#-install-desktop">Install desktop</a> ·
+  <a href="#-mobile-ios--android">Mobile</a> ·
   <a href="#-how-to-use">How to use</a> ·
   <a href="#-features">Features</a> ·
   <a href="#-faq">FAQ</a> ·
@@ -52,7 +60,7 @@
 Moving a file to another computer should not mean uploading it to someone else’s
 servers — or learning a command line.
 
-**croc-desktop** is a full desktop app for [croc](https://github.com/schollz/croc):
+**croc-desktop** is a full GUI for [croc](https://github.com/schollz/croc):
 
 | | |
 | --- | --- |
@@ -66,9 +74,13 @@ Unlike thin wrappers that only launch the `croc` CLI in a window, this app runs
 croc **inside the process**, so you get real dialogs, live progress, history,
 and relay hosting.
 
-## Install
+> **Stack note:** this project uses **[Wails v3](https://v3.wails.io)**
+> (`github.com/wailsapp/wails/v3`). Older docs or the `main` branch may still
+> mention Wails v2 — that is obsolete here.
 
-Download the latest build for your system:
+## Install (desktop)
+
+Download the latest **desktop** build for your system:
 
 **[Releases →](https://github.com/SihanTeng/croc-desktop/releases/latest)**
 
@@ -79,6 +91,52 @@ Download the latest build for your system:
 | **Windows** | `croc-desktop_*_windows-amd64.msi` | Run the installer |
 
 > Both sides of a transfer need either this app or the [croc CLI](https://github.com/schollz/croc).
+
+## Mobile (iOS · Android)
+
+Same app, same UI (bottom tabs on a phone-sized screen). Powered by **Wails v3**
+native mobile targets.
+
+| Client | Status | Where it lives | How to run |
+| --- | --- | --- | --- |
+| **iOS** | Experimental — build from source | Scaffold in [`build/ios/`](build/ios/) | Simulator / device (needs full **Xcode** on macOS) |
+| **Android** | Experimental — build from source | Scaffold in [`build/android/`](build/android/) | Emulator / device (needs **Android SDK + NDK**) |
+
+**There are no App Store / Play Store packages yet** — mobile is for people who
+build from this repo (or a CI you set up). Desktop remains the supported
+download path on [Releases](https://github.com/SihanTeng/croc-desktop/releases).
+
+### Build & run mobile clients
+
+Prerequisites: same as [Development](#-development) (Go, Node, Wails v3 CLI),
+plus the platform SDK.
+
+```sh
+# Install Wails v3 CLI (pin matches go.mod)
+go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.119
+
+# Frontend assets (embedded into the app)
+npm --prefix frontend ci && npm --prefix frontend run build
+
+# ── iOS (macOS + Xcode only) ─────────────────────────────────
+wails3 task ios:run                          # Simulator
+# Device:
+# wails3 task ios:package IOS_PLATFORM=device \
+#   CODESIGN_IDENTITY="Apple Development: You (TEAMID)"
+
+# ── Android ──────────────────────────────────────────────────
+wails3 task android:run                      # emulator or adb device
+```
+
+| | Value |
+| --- | --- |
+| iOS bundle ID | `com.schollz.croc-desktop` |
+| Android applicationId | `com.schollz.croc-desktop` |
+| Config | [`build/config.yml`](build/config.yml) (`ios:` block) |
+| Platform hooks | [`app_options_ios.go`](app_options_ios.go), [`app_options_android.go`](app_options_android.go) |
+
+**UI tip:** resize the desktop window to ~360px wide to preview the mobile
+bottom-tab layout without a phone.
 
 ## How to use
 
@@ -131,7 +189,7 @@ Download the latest build for your system:
 - Zip folders, exclude patterns, upload rate limit
 - Light / dark / system theme
 - Languages: English, 简体中文, 繁體中文, Español, Français, Deutsch, 日本語
-- Responsive layout (side navigation on desktop; bottom tabs on small windows)
+- Responsive layout: side rail on desktop; **bottom tabs on phones / small windows**
 
 ## FAQ
 
@@ -196,13 +254,24 @@ blocked launch, or right-click → **Open**.
 </details>
 
 <details>
-<summary><b>Is there a mobile app?</b></summary>
+<summary><b>Is this still Wails v2?</b></summary>
 
 <br>
 
-The UI is responsive, and experimental iOS/Android packaging exists for
-developers (Wails v3). **Store-ready mobile builds are not published yet** —
-desktop is the supported experience today.
+**No.** This branch uses **Wails v3** (`github.com/wailsapp/wails/v3`, see
+`go.mod`). Docs: [v3.wails.io](https://v3.wails.io). If you still see “Wails v2”
+on GitHub, you are looking at an older branch (e.g. `main` before merge).
+
+</details>
+
+<details>
+<summary><b>Where do I get the mobile apps?</b></summary>
+
+<br>
+
+See **[Mobile (iOS · Android)](#-mobile-ios--android)** above. They are built
+from this repo with `wails3 task ios:run` / `android:run` — not published as
+store installers yet.
 
 </details>
 
@@ -221,22 +290,26 @@ Contributions are welcome — bug reports, translations, docs, and pull requests
 
 <br>
 
-**Stack:** Go (see `go.mod`), Node.js, [Wails v3](https://v3.wails.io)
-(`v3.0.0-alpha2.119` in this repo).
+**Stack:** Go (see `go.mod`), Node.js, **[Wails v3](https://v3.wails.io)** —
+module `github.com/wailsapp/wails/v3` @ **v3.0.0-alpha2.119** (not the v2 CLI).
 
 ```sh
-# CLI (use -tags gtk3 on Linux without gtk4)
+# Wails v3 CLI (use -tags gtk3 on Linux without gtk4)
 go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.119
 
 # Linux: webkit2gtk 4.1 + GTK3 (project default)
 #   Fedora: webkit2gtk4.1-devel
 #   Debian/Ubuntu: libgtk-3-dev libwebkit2gtk-4.1-dev
 
-# Dev with hot reload
+# Dev with hot reload (desktop)
 WEBKIT_DISABLE_DMABUF_RENDERER=1 wails3 dev -config ./build/config.yml -port 34115
 
-# Production binary → bin/croc-desktop
+# Production desktop binary → bin/croc-desktop
 wails3 build -tags gtk3   # omit -tags gtk3 on macOS/Windows
+
+# Mobile — see “Mobile (iOS · Android)” section
+wails3 task ios:run
+wails3 task android:run
 
 # Tests
 npm --prefix frontend ci && npm --prefix frontend run build
@@ -245,7 +318,7 @@ npm --prefix frontend test
 ./e2e/run.sh
 ```
 
-More detail: `e2e/README.md`, `design.md`, and platform Taskfiles under `build/`.
+More detail: `e2e/README.md`, `design.md`, and Taskfiles under `build/`.
 
 **How it works (short):** the app depends on a croc fork with a hooks layer so
 progress and prompts are events in the UI, not a spawned CLI. See `go.mod`
@@ -256,7 +329,7 @@ progress and prompts are events in the UI, not a spawned CLI. See `go.mod`
 ## Acknowledgments
 
 - [croc](https://github.com/schollz/croc) by [@schollz](https://github.com/schollz) — the protocol and transfer engine
-- [Wails](https://wails.io) — Go + web UI for desktop (and experimental mobile)
+- [Wails v3](https://v3.wails.io) — Go + web UI for desktop and mobile
 
 ---
 
