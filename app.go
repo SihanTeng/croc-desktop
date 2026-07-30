@@ -32,7 +32,7 @@ type App struct {
 func NewApp() *App {
 	tm := newTransferManager()
 	hm := newHistoryManager(historyPath())
-	lm := newLogManager()
+	lm := newLogManager(logPath())
 	rm := newRelayManager()
 	tm.history = hm
 	tm.logger = lm

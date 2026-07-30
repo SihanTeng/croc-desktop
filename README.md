@@ -237,6 +237,7 @@ environment variable):
 
 - `croc-desktop.json` — preferences
 - `croc-desktop-history.json` — transfer history
+- `croc-desktop.log` — persistent app log (JSON lines, rotated at ~2 MiB × 3 files)
 
 Older installs that used `croc-gui.json` are upgraded automatically on first run.
 
