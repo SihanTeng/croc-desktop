@@ -1,6 +1,7 @@
 {
   "app.history": "历史记录",
   "app.logs": "日志",
+  "app.nav": "主导航",
   "app.receive": "接收",
   "app.relay": "中继",
   "app.send": "发送",

@@ -32,7 +32,7 @@
 
     <ComponentGroup Id="CrocFiles" Directory="INSTALLFOLDER">
       <Component Id="CrocExe" Guid="*" Win64="yes">
-        <File Id="crocgui.exe" Source="build\bin\croc-desktop.exe" KeyPath="yes" />
+        <File Id="crocgui.exe" Source="bin\croc-desktop.exe" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 

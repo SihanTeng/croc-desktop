@@ -2,11 +2,11 @@ package main
 
 import (
 	"embed"
+	"log"
+	"runtime"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
@@ -16,39 +16,70 @@ var assets embed.FS
 var appIcon []byte
 
 func main() {
-	app := NewApp()
+	svc := NewApp()
 
-	err := wails.Run(&options.App{
-		Title:     "croc-desktop",
-		Width:     1024,
-		Height:    720,
-		MinWidth:  820,
-		MinHeight: 600,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+	opts := application.Options{
+		Name:        "croc-desktop",
+		Description: "GUI for croc — encrypted peer-to-peer file transfer",
+		Icon:        appIcon,
+		Services: []application.Service{
+			application.NewService(svc),
 		},
-		BackgroundColour: &options.RGBA{R: 248, G: 250, B: 253, A: 255},
-		OnStartup:        app.startup,
-		OnShutdown:       app.shutdown,
-		Linux: &linux.Options{
-			Icon: appIcon,
-			// the Wayland app_id is derived from the prgname; pinning it makes
-			// the window match croc-desktop.desktop (and its icon) regardless of
-			// the binary name, e.g. the wails-dev binary
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
+		},
+		// the Wayland app_id is derived from the prgname; pinning it makes
+		// the window match croc-desktop.desktop (and its icon) regardless of
+		// the binary name
+		Linux: application.LinuxOptions{
 			ProgramName: "croc-desktop",
 		},
-		Bind: []interface{}{
-			app,
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
-		// route native file drops to the runtime callback; elements styled
-		// with --wails-drop-target: drop opt in as drop targets. NOTE: on
-		// Linux the native drop handlers live on the webview's own drag
-		// destination, so DisableWebViewDrop must stay false or drops die
-		DragAndDrop: &options.DragAndDrop{
-			EnableFileDrop: true,
+		// iOS WKWebView defaults; refined further under //go:build ios
+		IOS: application.IOSOptions{
+			EnableInlineMediaPlayback: true,
+			BackgroundColour:          application.NewRGB(248, 250, 253),
 		},
+	}
+	modifyOptionsForPlatform(&opts)
+
+	app := application.New(opts)
+
+	// Phone-friendly min size so the responsive layout can be exercised by
+	// resizing the desktop window; mobile platforms ignore window geometry.
+	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:            "croc-desktop",
+		Width:            1024,
+		Height:           720,
+		MinWidth:         360,
+		MinHeight:        480,
+		BackgroundColour: application.NewRGB(248, 250, 253),
+		// native file drops (desktop); mobile uses document pickers instead
+		EnableFileDrop: !isMobileGOOS(),
+		URL:            "/",
 	})
-	if err != nil {
-		println("Error:", err.Error())
+
+	// Bridge native file drops to the frontend event the Send view listens for.
+	win.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		paths := event.Context().DroppedFiles()
+		if len(paths) == 0 {
+			return
+		}
+		app.Event.Emit("files:dropped", paths)
+	})
+
+	if err := app.Run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func isMobileGOOS() bool {
+	switch runtime.GOOS {
+	case "ios", "android":
+		return true
+	default:
+		return false
 	}
 }

@@ -1,6 +1,7 @@
 {
   "app.history": "Historial",
   "app.logs": "Registros",
+  "app.nav": "Navegación principal",
   "app.receive": "Recibir",
   "app.relay": "Retransmisión",
   "app.send": "Enviar",

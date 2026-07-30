@@ -1,6 +1,7 @@
 {
   "app.history": "履歴",
   "app.logs": "ログ",
+  "app.nav": "メインナビゲーション",
   "app.receive": "受信",
   "app.relay": "リレー",
   "app.send": "送信",

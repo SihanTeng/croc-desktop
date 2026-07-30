@@ -72,15 +72,22 @@ func loadSettings() Settings {
 		return s
 	}
 	b, err := os.ReadFile(f)
+	fromLegacy := false
 	if err != nil {
-		// fall back to the pre-rename settings file once
+		// fall back to the pre-rename settings file (croc-gui → croc-desktop)
 		legacy := filepath.Join(filepath.Dir(f), "croc-gui.json")
 		if b, err = os.ReadFile(legacy); err != nil {
 			return s
 		}
+		fromLegacy = true
 	}
 	// keep defaults for anything missing from the file
 	_ = json.Unmarshal(b, &s)
+	// one-shot migrate: persist under the current name so upgrades keep
+	// working without relying on the legacy path forever
+	if fromLegacy {
+		_ = saveSettings(s)
+	}
 	return s
 }
 

@@ -56,6 +56,31 @@ func TestHistoryIgnoresCorruptFile(t *testing.T) {
 	}
 }
 
+// Pre-rename history files must load and be rewritten under the new name.
+func TestHistoryLegacyMigration(t *testing.T) {
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, "croc-gui-history.json")
+	current := filepath.Join(dir, "croc-desktop-history.json")
+	payload := `[{"id":"old","direction":"send","status":"completed"}]`
+	if err := os.WriteFile(legacy, []byte(payload), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := newHistoryManager(current)
+	items := h.list()
+	if len(items) != 1 || items[0].ID != "old" {
+		t.Fatalf("legacy history not loaded: %+v", items)
+	}
+	if _, err := os.Stat(current); err != nil {
+		t.Fatalf("expected migration write to %s: %v", current, err)
+	}
+	_ = os.Remove(legacy)
+	h2 := newHistoryManager(current)
+	if got := h2.list(); len(got) != 1 || got[0].ID != "old" {
+		t.Fatalf("post-migration load failed: %+v", got)
+	}
+}
+
 func TestTruncateText(t *testing.T) {
 	short := "hello"
 	if got := truncateText(short, 10); got != short {

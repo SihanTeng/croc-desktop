@@ -44,15 +44,26 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+      - name: Install Wails v3 CLI
+        # gtk3 tag: CLI itself links webkit; needed on Linux runners without gtk4
+        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.119
 
       - name: Install Linux webview deps
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev imagemagick
 
-      - name: Build
-        run: wails build -platform ${{ matrix.platform }} -tags webkit2_41 -o ${{ matrix.bin }}
+      # Wails v3 builds for the host OS via Taskfile; matrix runners are
+      # native (ubuntu → linux, macos → darwin, windows → windows).
+      # Linux uses EXTRA_TAGS=gtk3 (webkit2gtk 4.1) so CI doesn't need gtk4.
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: wails3 build -tags gtk3
+        env:
+          EXTRA_TAGS: gtk3
+
+      - name: Build (macOS / Windows)
+        if: runner.os != 'Linux'
+        run: wails3 build
 
       # ---------- Linux: AppImage ----------
 
@@ -66,7 +77,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p AppDir/usr/bin
-          cp build/bin/croc-desktop AppDir/usr/bin/
+          # v3 places host builds in bin/ (Taskfile BIN_DIR)
+          cp bin/croc-desktop AppDir/usr/bin/
           # linuxdeploy only accepts standard icon resolutions (max 512px)
           # and deploys the icon by basename, which must match Icon=croc-desktop
           convert build/appicon.png -resize 512x512 /tmp/croc-desktop.png
@@ -84,11 +96,20 @@ jobs:
       - name: Ad-hoc sign and package DMG
         if: runner.os == 'macOS'
         run: |
-          cd build/bin
-          codesign --deep --force --sign - croc-desktop.app
-          mkdir -p dmg
-          cp -R croc-desktop.app dmg/
-          hdiutil create -volname croc -srcfolder dmg -ov -format UDZO ../../${{ matrix.artifact }}
+          # wails3 package lays out a .app under bin/; fall back to a bare binary
+          APP_PATH="bin/croc-desktop.app"
+          if [ ! -d "$APP_PATH" ]; then
+            wails3 package
+          fi
+          if [ -d "$APP_PATH" ]; then
+            codesign --deep --force --sign - "$APP_PATH"
+            mkdir -p dmg
+            cp -R "$APP_PATH" dmg/
+          else
+            mkdir -p dmg
+            cp bin/croc-desktop dmg/
+          fi
+          hdiutil create -volname croc -srcfolder dmg -ov -format UDZO ${{ matrix.artifact }}
 
       # ---------- Windows: MSI ----------
 

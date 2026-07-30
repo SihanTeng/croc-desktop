@@ -55,7 +55,28 @@ pre,
 
 .app {
   height: 100%;
+  height: 100dvh;
   display: flex;
+  /* notches / home indicators on phones and tablets */
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+}
+
+/* Desktop-only chrome: mobile top bar is empty on wide screens */
+.mobile-top {
+  display: none;
+}
+
+/* Icon slot shared by rail + bottom nav; rail keeps text-only by default */
+.nav-icon {
+  display: none;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+/* Mobile bottom tab bar — hidden on desktop */
+.bottom-nav {
+  display: none;
 }
 
 /* ---------- N3 side rail ---------- */
@@ -1180,5 +1201,232 @@ input[type="checkbox"] {
 
   .view {
     animation: fade-in var(--dur-reduced) linear;
+  }
+}
+
+/* ---------- responsive / mobile ----------
+ * Breakpoint ~720px: phone + small tablet + Wails iOS/Android webviews.
+ * Desktop keeps the N3 left rail; narrow screens use a bottom tab bar.
+ */
+
+@media (max-width: 720px) {
+  .app {
+    flex-direction: column;
+    padding-bottom: 0;
+  }
+
+  .rail {
+    display: none;
+  }
+
+  .mobile-top {
+    display: flex;
+    align-items: center;
+    padding: max(var(--space-sm), env(safe-area-inset-top, 0px)) 0 var(--space-sm);
+    margin-bottom: var(--space-xs);
+    border-bottom: var(--border-hairline) solid var(--color-rule);
+  }
+
+  .content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 var(--space-md) var(--space-lg);
+    /* room for bottom nav + home indicator */
+    padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .view {
+    max-width: none;
+    gap: var(--space-md);
+  }
+
+  .view-title {
+    font-size: var(--text-md);
+  }
+
+  .card {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  /* Bottom tab bar */
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    justify-content: space-around;
+    align-items: stretch;
+    gap: 0;
+    min-height: 3.5rem;
+    padding: var(--space-2xs) var(--space-2xs)
+      max(var(--space-2xs), env(safe-area-inset-bottom, 0px));
+    background: color-mix(in oklab, var(--color-paper) 92%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: var(--border-hairline) solid var(--color-rule);
+  }
+
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+    min-height: 2.75rem;
+    border: none;
+    background: transparent;
+    color: var(--color-muted);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: var(--space-2xs) 0;
+    border-radius: var(--radius-control);
+    transition:
+      color var(--dur-micro) var(--ease-out),
+      background-color var(--dur-micro) var(--ease-out);
+  }
+
+  .bottom-nav-item .nav-icon {
+    display: block;
+  }
+
+  .bottom-nav-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 2px;
+  }
+
+  .bottom-nav-item-active,
+  .bottom-nav-item-active:hover {
+    color: var(--color-accent);
+  }
+
+  .bottom-nav-item:hover {
+    color: var(--color-ink);
+  }
+
+  .bottom-nav-item:active {
+    background: var(--color-paper-2);
+  }
+
+  /* Touch-friendly controls */
+  .btn {
+    min-height: 2.75rem;
+  }
+
+  .btn-sm {
+    min-height: 2.25rem;
+  }
+
+  .btn-row {
+    flex-wrap: wrap;
+  }
+
+  .btn-row .btn {
+    flex: 1 1 auto;
+  }
+
+  /* Code / QR: stack on narrow screens */
+  .code-display {
+    padding: var(--space-md);
+  }
+
+  .code-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .code-phrase {
+    font-size: var(--text-md);
+    word-break: break-all;
+    text-align: center;
+  }
+
+  .code-display .btn-row {
+    justify-content: stretch;
+  }
+
+  .code-display img {
+    align-self: center;
+    max-width: min(220px, 70vw);
+  }
+
+  /* File rows and forms */
+  .file-list {
+    max-height: none;
+  }
+
+  .field-row,
+  .form-row,
+  .saved-row,
+  .qr-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .modal {
+    max-width: calc(100vw - 2 * var(--space-md));
+    max-height: calc(100dvh - 2 * var(--space-lg));
+    margin: var(--space-md);
+  }
+
+  .modal-footer {
+    flex-wrap: wrap;
+  }
+
+  .modal-footer .btn {
+    flex: 1 1 auto;
+  }
+
+  .dropzone {
+    min-height: 8rem;
+    padding: var(--space-md);
+  }
+
+  /* Prefer coarser pointer targets on touch devices */
+  .chip-pick,
+  .chip-x {
+    min-height: 2.25rem;
+    padding-top: var(--space-xs);
+    padding-bottom: var(--space-xs);
+  }
+}
+
+/* Extra-narrow phones (≤380px): shorten bottom labels via smaller type */
+@media (max-width: 380px) {
+  .bottom-nav-item {
+    font-size: 0.55rem;
+  }
+
+  .bottom-nav-item .nav-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .content {
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
+  }
+}
+
+/* Touch devices: slightly larger hit targets even on tablets in landscape */
+@media (hover: none) and (pointer: coarse) {
+  .btn {
+    min-height: max(var(--control-height-md), 2.75rem);
+  }
+
+  .rail-item {
+    min-height: 2.75rem;
   }
 }

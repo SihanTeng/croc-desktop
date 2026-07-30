@@ -1,0 +1,76 @@
+version: '3'
+
+vars:
+  APP_NAME: "croc-desktop"
+  BIN_DIR: "bin"
+  PACKAGE_MANAGER: '{{.PACKAGE_MANAGER | default "npm"}}'
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 34115}}'
+  GOOS: '{{.GOOS | default OS}}'
+  # Default to gtk3 on Linux so builds work with webkit2gtk 4.1 (same as v2).
+  # For native gtk4/webkitgtk 6: EXTRA_TAGS= (empty) or install gtk4 + webkitgtk6.
+  EXTRA_TAGS: '{{.EXTRA_TAGS | default "gtk3"}}'
+
+includes:
+  common: ./build/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+  darwin: ./build/darwin/Taskfile.yml
+  linux: ./build/linux/Taskfile.yml
+  ios: ./build/ios/Taskfile.yml
+  android: ./build/android/Taskfile.yml
+
+tasks:
+  build:
+    summary: Builds the application for the host desktop OS
+    cmds:
+      - task: "{{.GOOS}}:build"
+        vars:
+          EXTRA_TAGS: "{{.EXTRA_TAGS}}"
+          DEV: "{{.DEV}}"
+          ARCH: "{{.ARCH}}"
+          OUTPUT: "{{.OUTPUT}}"
+
+  package:
+    summary: Packages a production build for the host desktop OS
+    cmds:
+      - task: "{{.GOOS}}:package"
+        vars:
+          EXTRA_TAGS: "{{.EXTRA_TAGS}}"
+
+  run:
+    summary: Runs the desktop application
+    cmds:
+      - task: "{{.GOOS}}:run"
+        vars:
+          EXTRA_TAGS: "{{.EXTRA_TAGS}}"
+
+  dev:
+    summary: Runs the application in development mode (hot reload)
+    cmds:
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  # ---- mobile (Wails v3) ----
+  # Requires platform SDKs: full Xcode for iOS; Android SDK + NDK for Android.
+  # See https://v3.wails.io and build/ios, build/android Taskfiles.
+
+  ios:run:
+    summary: Build and launch on the iOS Simulator
+    cmds:
+      - task: ios:run
+
+  ios:package:
+    summary: Package an iOS .app (simulator by default; IOS_PLATFORM=device for devices)
+    cmds:
+      - task: ios:package
+        vars:
+          IOS_PLATFORM: '{{.IOS_PLATFORM | default "simulator"}}'
+          CODESIGN_IDENTITY: '{{.CODESIGN_IDENTITY | default "-"}}'
+
+  android:run:
+    summary: Build, install, and launch on the Android emulator/device
+    cmds:
+      - task: android:run
+
+  android:package:
+    summary: Package a release Android APK/AAB
+    cmds:
+      - task: android:package

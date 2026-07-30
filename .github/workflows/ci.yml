@@ -27,21 +27,31 @@ jobs:
         working-directory: frontend
         run: npm ci && npm run build
 
+      # Wails v3 Linux defaults to gtk4/webkitgtk6; this project targets the
+      # gtk3/webkit2gtk 4.1 stack (EXTRA_TAGS=gtk3) for broader distro support.
+      - name: Install webview deps
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
       - name: golangci-lint
         # built from source with the runner's Go so its language version
         # always matches go.mod (prebuilt binaries lag behind)
         run: |
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          golangci-lint run ./...
+          golangci-lint run --build-tags gtk3 ./...
 
       - name: gofmt check
-        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+        run: |
+          files=$(find . -name '*.go' \
+            -not -path './frontend/node_modules/*' \
+            -not -path './e2e/node_modules/*' \
+            -not -path './bin/*')
+          test -z "$(gofmt -l $files)" || { gofmt -l $files; exit 1; }
 
       - name: go vet
-        run: go vet ./...
+        run: go vet -tags gtk3 ./...
 
       - name: go test
-        run: go test -timeout 300s ./...
+        run: go test -tags gtk3 -timeout 300s ./...
 
   frontend:
     name: Frontend — format, lint, typecheck, build
@@ -95,8 +105,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+      - name: Install Wails v3 CLI
+        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.119
 
       - name: Install webview and display deps
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev xvfb

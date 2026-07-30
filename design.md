@@ -18,6 +18,10 @@ modern-minimal
   content. No marketing sections, no hero copy, no eyebrow tags.
 - All four views share one shape: left side-rail (N3) + single-column content,
   forms and status surfaces composed with hairlines.
+- **Responsive (Wails desktop + mobile webviews):** at widths ≤720px the N3
+  rail collapses to a fixed bottom tab bar (icons + uppercase mono labels)
+  with `env(safe-area-inset-*)` padding for notched phones. Desktop min
+  window size is 360×480 so the mobile chrome can be previewed by resizing.
 
 ## Theme — Cobalt (catalog)
 

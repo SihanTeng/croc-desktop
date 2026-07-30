@@ -58,13 +58,19 @@ func newHistoryManager(path string) *historyManager {
 	h := &historyManager{path: path}
 	if path != "" {
 		b, err := os.ReadFile(path)
+		fromLegacy := false
 		if err != nil {
-			// fall back to the pre-rename history file once
+			// fall back to the pre-rename history file (croc-gui → croc-desktop)
 			legacy := filepath.Join(filepath.Dir(path), "croc-gui-history.json")
 			b, err = os.ReadFile(legacy)
+			fromLegacy = err == nil
 		}
 		if err == nil {
 			_ = json.Unmarshal(b, &h.items)
+			// migrate onto the current filename so later loads don't need the legacy path
+			if fromLegacy {
+				h.saveLocked()
+			}
 		}
 	}
 	return h

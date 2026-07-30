@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=croc-desktop
+Comment=Desktop GUI for croc — encrypted peer-to-peer file transfer
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/croc-desktop %u
+Terminal=false
+Type=Application
+Icon=croc-desktop
+Categories=Utility;
+StartupWMClass=croc-desktop
+
+ 
