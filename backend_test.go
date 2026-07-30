@@ -104,11 +104,15 @@ func newTestAppWithLocal(disableLocal bool) (*App, *eventLog) {
 	}
 	a := NewApp()
 	a.tm.emit = l.emit
-	// keep test history in memory: NewApp points at the real user's history
-	// file, which tests must not touch
+	// keep test history + logs in memory: NewApp points at the real user's
+	// history/log files, which tests must not read or pollute
 	hm := newHistoryManager("")
 	a.hm = hm
 	a.tm.history = hm
+	lm := newLogManager("")
+	a.lm = lm
+	a.tm.logger = lm
+	a.rm.logger = lm
 	a.settings = Settings{
 		RelayAddress:  "127.0.0.1:" + testRelayPorts[0],
 		RelayPassword: "pass123",

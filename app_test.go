@@ -33,7 +33,9 @@ func TestStartReceiveValidation(t *testing.T) {
 }
 
 func TestGetLogsEmpty(t *testing.T) {
-	a := NewApp()
+	// Use isolated app so we don't load the real on-disk log from other tests
+	// or a previous desktop session.
+	a, _ := newTestApp()
 	// must be a non-nil empty slice so the frontend gets [] rather than null
 	logs := a.GetLogs()
 	if logs == nil || len(logs) != 0 {
