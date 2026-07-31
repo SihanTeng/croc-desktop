@@ -6,6 +6,42 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
+ * AppInfo is shown on the Settings page (version + engine + defaults).
+ */
+export class AppInfo {
+    "version": string;
+    "crocVersion": string;
+    "defaultRelay": string;
+    "defaultRelay6": string;
+
+    /** Creates a new AppInfo instance. */
+    constructor($$source: Partial<AppInfo> = {}) {
+        if (!("version" in $$source)) {
+            this["version"] = "";
+        }
+        if (!("crocVersion" in $$source)) {
+            this["crocVersion"] = "";
+        }
+        if (!("defaultRelay" in $$source)) {
+            this["defaultRelay"] = "";
+        }
+        if (!("defaultRelay6" in $$source)) {
+            this["defaultRelay6"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new AppInfo instance from a string or object.
+     */
+    static createFrom($$source: any = {}): AppInfo {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new AppInfo($$parsedSource as Partial<AppInfo>);
+    }
+}
+
+/**
  * SavedCode is a remembered receive code (favorite), managed from the
  * Receive view.
  */

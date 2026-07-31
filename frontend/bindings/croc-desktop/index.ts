@@ -7,6 +7,7 @@ export {
 };
 
 export {
+    AppInfo,
     SavedCode,
     Settings
 } from "./models.js";

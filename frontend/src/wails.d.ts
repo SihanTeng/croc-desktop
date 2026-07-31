@@ -32,6 +32,7 @@ declare global {
           PickImage(): Promise<string>;
           GetSettings(): Promise<import("./api").Settings>;
           SaveSettings(s: import("./api").Settings): Promise<void>;
+          GetAppInfo(): Promise<import("./api").AppInfo>;
           StartRelay(ports: string[], password: string): Promise<void>;
           StopRelay(): Promise<void>;
           GetRelayState(): Promise<import("./api").RelayState>;

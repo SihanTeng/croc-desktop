@@ -50,6 +50,15 @@ export function DecodeCodeFromFile(path: string): $CancellablePromise<string> {
     return $Call.ByID(1891733924, path);
 }
 
+/**
+ * GetAppInfo returns product/engine version and the stock public relays.
+ */
+export function GetAppInfo(): $CancellablePromise<$models.AppInfo> {
+    return $Call.ByID(713661858).then(($result: any) => {
+        return $$createType0($result);
+    });
+}
+
 export function GetDefaultDownloadDir(): $CancellablePromise<string> {
     return $Call.ByID(658010303);
 }
@@ -67,7 +76,7 @@ export function GetFileDataURL(path: string): $CancellablePromise<string> {
  */
 export function GetHistory(): $CancellablePromise<$models.historyItem[]> {
     return $Call.ByID(210907985).then(($result: any) => {
-        return $$createType1($result);
+        return $$createType2($result);
     });
 }
 
@@ -76,7 +85,7 @@ export function GetHistory(): $CancellablePromise<$models.historyItem[]> {
  */
 export function GetLogs(): $CancellablePromise<$models.logEntry[]> {
     return $Call.ByID(1743981476).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType4($result);
     });
 }
 
@@ -89,13 +98,13 @@ export function GetQrPng(text: string): $CancellablePromise<string> {
 
 export function GetRelayState(): $CancellablePromise<$models.relayState> {
     return $Call.ByID(1631671617).then(($result: any) => {
-        return $$createType4($result);
+        return $$createType5($result);
     });
 }
 
 export function GetSettings(): $CancellablePromise<$models.Settings> {
     return $Call.ByID(2554697378).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType6($result);
     });
 }
 
@@ -121,7 +130,7 @@ export function NormalizeCode(input: string): $CancellablePromise<string> {
  */
 export function PathsIsDir(paths: string[]): $CancellablePromise<string[]> {
     return $Call.ByID(2780421882, paths).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType7($result);
     });
 }
 
@@ -131,7 +140,7 @@ export function PickDirectory(): $CancellablePromise<string> {
 
 export function PickFiles(): $CancellablePromise<string[]> {
     return $Call.ByID(4162647679).then(($result: any) => {
-        return $$createType6($result);
+        return $$createType7($result);
     });
 }
 
@@ -187,10 +196,11 @@ export function StopRelay(): $CancellablePromise<void> {
 }
 
 // Private type creation functions
-const $$createType0 = $models.historyItem.createFrom;
-const $$createType1 = $Create.Array($$createType0);
-const $$createType2 = $models.logEntry.createFrom;
-const $$createType3 = $Create.Array($$createType2);
-const $$createType4 = $models.relayState.createFrom;
-const $$createType5 = $models.Settings.createFrom;
-const $$createType6 = $Create.Array($Create.Any);
+const $$createType0 = $models.AppInfo.createFrom;
+const $$createType1 = $models.historyItem.createFrom;
+const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = $models.logEntry.createFrom;
+const $$createType4 = $Create.Array($$createType3);
+const $$createType5 = $models.relayState.createFrom;
+const $$createType6 = $models.Settings.createFrom;
+const $$createType7 = $Create.Array($Create.Any);

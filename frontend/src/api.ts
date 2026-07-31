@@ -29,6 +29,7 @@ type WailsApp = {
   PickImage(): Promise<string>;
   GetSettings(): Promise<Settings>;
   SaveSettings(s: Settings): Promise<void>;
+  GetAppInfo(): Promise<AppInfo>;
   StartRelay(ports: string[], password: string): Promise<void>;
   StopRelay(): Promise<void>;
   GetRelayState(): Promise<RelayState>;
@@ -59,6 +60,13 @@ const previewStub: Partial<WailsApp> = {
       theme: "system",
       language: "system",
       savedCodes: [],
+    }),
+  GetAppInfo: () =>
+    Promise.resolve({
+      version: "0.2.0",
+      crocVersion: "v10.5.0",
+      defaultRelay: "croc.schollz.com",
+      defaultRelay6: "croc6.schollz.com",
     }),
   GetDefaultDownloadDir: () => Promise.resolve(""),
   GetRelayState: () => Promise.resolve({ running: false }),
@@ -208,6 +216,14 @@ export interface Settings {
   theme: "system" | "light" | "dark";
   language: string;
   savedCodes?: SavedCode[];
+}
+
+/** Product / engine metadata for the Settings about section. */
+export interface AppInfo {
+  version: string;
+  crocVersion: string;
+  defaultRelay: string;
+  defaultRelay6: string;
 }
 
 export interface RelayState {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { App as Backend, Settings } from "../api";
+import { App as Backend, AppInfo, Settings } from "../api";
 import { applyTheme } from "../theme";
 import { availableLanguages, setLanguage, useT } from "../i18n";
 
@@ -20,11 +20,15 @@ const languageNames: Record<string, string> = {
 export default function SettingsView() {
   const t = useT();
   const [s, setS] = useState<Settings | null>(null);
+  const [info, setInfo] = useState<AppInfo | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Backend.GetSettings().then(setS);
+    Backend.GetAppInfo()
+      .then(setInfo)
+      .catch(() => setInfo(null));
   }, []);
 
   if (!s) return <div className="view" />;
@@ -52,9 +56,65 @@ export default function SettingsView() {
     }
   };
 
+  const relaySummary =
+    [s.relayAddress, s.relayAddress6].filter((x) => x && x.trim()).join(" · ") ||
+    "—";
+
   return (
     <div className="view">
       <h2 className="view-title">{t("settings.title")}</h2>
+
+      <section className="settings-section" aria-labelledby="settings-about">
+        <h3 id="settings-about" className="settings-section-title">
+          {t("settings.about")}
+        </h3>
+        <dl className="settings-meta">
+          <div className="settings-meta-row">
+            <dt>{t("settings.version")}</dt>
+            <dd>
+              <code>{info?.version ?? "…"}</code>
+            </dd>
+          </div>
+          <div className="settings-meta-row">
+            <dt>{t("settings.crocVersion")}</dt>
+            <dd>
+              <code>{info?.crocVersion ?? "…"}</code>
+            </dd>
+          </div>
+          <div className="settings-meta-row">
+            <dt>{t("settings.relayActive")}</dt>
+            <dd className="settings-meta-relay" title={relaySummary}>
+              {s.relayAddress?.trim() ? (
+                <code>{s.relayAddress.trim()}</code>
+              ) : (
+                <span className="hint">—</span>
+              )}
+              {s.relayAddress6?.trim() ? (
+                <code className="settings-meta-relay6">{s.relayAddress6.trim()}</code>
+              ) : null}
+            </dd>
+          </div>
+          {info?.defaultRelay ? (
+            <div className="settings-meta-row">
+              <dt>{t("settings.relayDefault")}</dt>
+              <dd className="settings-meta-relay">
+                <code>{info.defaultRelay}</code>
+                {info.defaultRelay6 ? (
+                  <code className="settings-meta-relay6">{info.defaultRelay6}</code>
+                ) : null}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      </section>
+
+      <section className="settings-section" aria-labelledby="settings-relay">
+        <h3 id="settings-relay" className="settings-section-title">
+          {t("settings.relaySection")}
+        </h3>
+        <p className="hint settings-section-hint">{t("settings.relayHint")}</p>
+      </section>
+
       <div className="grid-2">
         <label className="field">
           <span className="field-label">{t("settings.relayV4")}</span>
@@ -225,3 +285,4 @@ export default function SettingsView() {
     </div>
   );
 }
+
