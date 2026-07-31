@@ -298,6 +298,50 @@ store installers yet.
 
 </details>
 
+<details>
+<summary><b>使用 Clash 等代理时连不上中继？请将中继设为直连（DIRECT）</b></summary>
+
+<br>
+
+若本机开启了 **Clash / Clash Meta（mihomo）/ Clash Verge** 等代理（尤其是
+**fake-IP** 模式），公共中继域名可能被解析成 `198.18.x.x` 等虚假地址，导致
+发送/接收失败（超时、EOF、「无法连接中继」等）。
+
+**请在代理工具中把 croc 公共中继设为直连（DIRECT）**，并建议加入 fake-IP
+过滤。配置后**重载配置**，并**重启 croc-desktop**。应用内 Settings 请填写
+**域名**（如 `croc.schollz.com:9009`），不要填写 `198.18.…` 地址。
+
+**规则示例**（写在 `rules:` **靠前**位置，保证优先生效）：
+
+```yaml
+rules:
+  - DOMAIN,croc.schollz.com,DIRECT
+  - DOMAIN,croc6.schollz.com,DIRECT
+  # 可选：同域名后缀一并直连
+  - DOMAIN-SUFFIX,schollz.com,DIRECT
+  # …其余规则…
+```
+
+**DNS fake-IP 过滤（推荐，Clash Meta / mihomo）：**
+
+```yaml
+dns:
+  enable: true
+  enhanced-mode: fake-ip
+  fake-ip-filter:
+    - croc.schollz.com
+    - croc6.schollz.com
+    - +.schollz.com   # 可选
+```
+
+图形界面用户可在「规则 / Rules」中手动添加上述 **DOMAIN → DIRECT** 项，
+保存后重载配置。
+
+> 说明：直连仅在你的真实网络能访问公共中继时有效。若运营商屏蔽了该中继，
+> 需要改用可访问的中继，或在 Settings 中填写自建/其他可用中继地址。
+
+</details>
+
 ## Contributing
 
 Contributions are welcome — bug reports, translations, docs, and pull requests.
