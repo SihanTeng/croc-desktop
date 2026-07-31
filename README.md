@@ -80,14 +80,36 @@ and relay hosting.
 
 ## Install (desktop)
 
-Download the latest **desktop** build for your system:
+### One-line install
+
+**Linux / macOS:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/SihanTeng/croc-desktop/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/SihanTeng/croc-desktop/main/install.ps1 | iex
+```
+
+| Platform | What the script installs | Notes |
+| --- | --- | --- |
+| **Linux** (amd64) | AppImage → `~/.local/bin/croc-desktop` | Adds a desktop menu entry; ensure `~/.local/bin` is on `PATH` |
+| **macOS** (Apple Silicon) | DMG → `/Applications` | Ad-hoc signed — first open may need **Privacy & Security → Open Anyway** |
+| **Windows** (x64) | MSI via `msiexec` | May prompt for administrator approval |
+
+Optional: pin a version with `VERSION=v0.2.0` (Unix) or `$env:VERSION = "v0.2.0"` (PowerShell) before the one-liner.
+
+### Manual download
 
 **[Releases →](https://github.com/SihanTeng/croc-desktop/releases/latest)**
 
 | Platform | File | Tips |
 | --- | --- | --- |
 | **Linux** | `croc-desktop_*_linux-amd64.AppImage` | `chmod +x` the file, then double-click or run it |
-| **macOS** (Apple Silicon) | `croc-desktop_*_darwin-arm64.dmg` | Open the DMG and drag the app to Applications. First open may need **System Settings → Privacy & Security** (ad-hoc signed) |
+| **macOS** (Apple Silicon) | `croc-desktop_*_darwin-arm64.dmg` | Open the DMG and drag the app to Applications |
 | **Windows** | `croc-desktop_*_windows-amd64.msi` | Run the installer |
 
 > Both sides of a transfer need either this app or the [croc CLI](https://github.com/schollz/croc).

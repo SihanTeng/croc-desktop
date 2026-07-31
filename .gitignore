@@ -35,5 +35,7 @@ build/android/build/
 build/android/local.properties
 build/android/overlay.json
 build/android/gen/
+build/android/app/src/main/jniLibs/**/*.so
+build/android/app/src/main/jniLibs/**/*.h
 bin/*.apk
 *.apk
