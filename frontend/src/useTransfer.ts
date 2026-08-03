@@ -79,7 +79,14 @@ export function useTransfer(): TransferModel {
   }, []);
 
   const begin = useCallback((direction: Direction, code: string) => {
-    setT({ ...initial, direction, code, phase: "connecting" });
+    setT((p) => {
+      // The backend emits its first state (e.g. "waiting" for a send)
+      // synchronously with the start call, and over the server-mode HTTP+WS
+      // transport that event can land before the call's promise resolves.
+      // Don't regress an already-live phase back to "connecting".
+      const live = p.phase === "connecting" || p.phase === "waiting" || p.phase === "transferring";
+      return { ...initial, direction, code, phase: live ? p.phase : "connecting" };
+    });
   }, []);
   const clearAccept = useCallback(() => setT((p) => ({ ...p, accept: null })), []);
   const clearOverwrite = useCallback(() => setT((p) => ({ ...p, overwrite: null })), []);
