@@ -119,11 +119,12 @@ tasks:
         SO="build/android/app/src/main/jniLibs/$JNI_DIR/libwails.so"
         if command -v readelf >/dev/null 2>&1; then
           # Last column of LOAD rows is Align; require ≥ 0x4000 (16384).
-          # bash $((0x4000)) handles hex; portable without gawk strtonum.
+          # mvdan/sh arithmetic has no hex literals ($((0x4000)) == 0), so
+          # convert with printf %d instead; portable without gawk strtonum.
           BAD=0
           while read -r align; do
             [ -z "$align" ] && continue
-            val=$((align))
+            val=$(printf '%d' "$align")
             if [ "$val" -lt 16384 ]; then
               echo "Error: $SO has LOAD Align $align (< 16 KB). Rebuild with CGO_LDFLAGS max-page-size=16384."
               readelf -W -l "$SO" | head -40
