@@ -134,10 +134,7 @@ func TestHistoryAndLogsClear(t *testing.T) {
 		t.Fatalf("ClearHistory left %v", h)
 	}
 
-	// log buffer starts empty under newTestApp (no startup wiring)
-	if logs := a.GetLogs(); logs == nil || len(logs) != 0 {
-		// may have entries from transfer; just ensure Clear works
-	}
+	// the transfer may have added log entries; just ensure Clear works
 	a.ClearLogs()
 	if logs := a.GetLogs(); logs == nil || len(logs) != 0 {
 		t.Fatalf("ClearLogs left %v", logs)

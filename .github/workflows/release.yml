@@ -44,13 +44,14 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Wails v3 CLI
-        # gtk3 tag: CLI itself links webkit; needed on Linux runners without gtk4
-        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.119
-
       - name: Install Linux webview deps
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev imagemagick
+
+      - name: Install Wails v3 CLI
+        # gtk3 tag: CLI itself links webkit; needed on Linux runners without gtk4.
+        # Must run after the webview deps: -tags gtk3 shells out to pkg-config.
+        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.119
 
       # Wails v3 builds for the host OS via Taskfile; matrix runners are
       # native (ubuntu → linux, macos → darwin, windows → windows).

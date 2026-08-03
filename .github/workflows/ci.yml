@@ -105,11 +105,13 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Wails v3 CLI
-        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.119
-
+      # deps must come first: building the CLI with -tags gtk3 runs pkg-config
+      # against gtk+-3.0 / webkit2gtk-4.1
       - name: Install webview and display deps
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev xvfb
+
+      - name: Install Wails v3 CLI
+        run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.119
 
       - name: Build frontend
         working-directory: frontend

@@ -57,8 +57,7 @@ export default function SettingsView() {
   };
 
   const relaySummary =
-    [s.relayAddress, s.relayAddress6].filter((x) => x && x.trim()).join(" · ") ||
-    "—";
+    [s.relayAddress, s.relayAddress6].filter((x) => x && x.trim()).join(" · ") || "—";
 
   return (
     <div className="view">
@@ -285,4 +284,3 @@ export default function SettingsView() {
     </div>
   );
 }
-
