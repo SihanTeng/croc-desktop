@@ -36,7 +36,20 @@ export function uniqueCode(prefix = "e2e") {
 
 // open the app and clear any transfer state left by a previous test
 export async function freshAppPage(page) {
+  // Backend→frontend events (transfer:state, progress, …) travel over a
+  // WebSocket that custom.js opens after page load; a send started before
+  // the socket is open misses the one-shot "waiting" event and wedges the
+  // UI. Wait for the server's "connected" log line before touching the UI.
+  // (Absent in `wails3 dev`, where bound calls don't work anyway — fall
+  // through after the timeout there.)
+  const wsReady = page
+    .waitForEvent("console", {
+      predicate: (m) => m.text().includes("[Wails] Event WebSocket connected"),
+      timeout: 10_000,
+    })
+    .catch(() => {});
   await page.goto(APP_URL);
+  await wsReady;
   await page.waitForFunction(() => window.go?.main?.App, null, { timeout: 30_000 });
   // the backend cancels regardless of which browser page started the transfer
   await page.evaluate(() => window.go.main.App.CancelTransfer());
