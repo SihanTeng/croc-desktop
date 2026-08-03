@@ -12,7 +12,7 @@ includes:
 # For automatically managed signing & provisioning, use `task ios:xcode` and
 # build from the generated Xcode project instead.
 vars:
-  BUNDLE_ID: '{{.BUNDLE_ID | default "com.schollz.croc-desktop"}}'
+  BUNDLE_ID: '{{.BUNDLE_ID | default "io.github.sihanteng.croc-desktop"}}'
   IOS_PLATFORM: '{{.IOS_PLATFORM | default "simulator"}}'
   MIN_IOS_VERSION: '{{.MIN_IOS_VERSION | default "15.0"}}'
   IOS_SDK: '{{if eq .IOS_PLATFORM "device"}}iphoneos{{else}}iphonesimulator{{end}}'

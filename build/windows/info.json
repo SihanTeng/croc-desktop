@@ -5,9 +5,9 @@
 	"info": {
 		"0000": {
 			"ProductVersion": "0.2.0",
-			"CompanyName": "croc",
+			"CompanyName": "SihanTeng",
 			"FileDescription": "Desktop GUI for croc — encrypted peer-to-peer file transfer",
-			"LegalCopyright": "© 2026 croc",
+			"LegalCopyright": "© 2026 SihanTeng",
 			"ProductName": "croc-desktop",
 			"Comments": "croc-desktop"
 		}

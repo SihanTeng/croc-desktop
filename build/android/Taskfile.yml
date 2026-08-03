@@ -5,7 +5,7 @@ includes:
 
 vars:
   # No hyphens — Android package names must be valid Java identifiers.
-  APP_ID: '{{.APP_ID | default "com.schollz.crocdesktop"}}'
+  APP_ID: '{{.APP_ID | default "io.github.sihanteng.crocdesktop"}}'
   MIN_SDK: '21'
   TARGET_SDK: '35'
   # The emulator runs the host architecture; physical devices are arm64

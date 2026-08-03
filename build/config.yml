@@ -4,21 +4,21 @@
 version: '3'
 
 info:
-  companyName: "croc"
+  companyName: "SihanTeng"
   productName: "croc-desktop"
-  productIdentifier: "com.schollz.croc-desktop"
+  productIdentifier: "io.github.sihanteng.croc-desktop"
   description: "GUI for croc — encrypted peer-to-peer file transfer"
-  copyright: "© 2026 croc"
+  copyright: "© 2026 SihanTeng"
   comments: "croc-desktop"
   version: "0.2.0"
 
 # iOS (used by wails3 task ios:* / ios:xcode)
 ios:
-  bundleID: "com.schollz.croc-desktop"
-  displayName: "croc"
+  bundleID: "io.github.sihanteng.croc-desktop"
+  displayName: "croc-desktop"
   version: "0.2.0"
   minIOSVersion: "15.0"
-  company: "croc"
+  company: "SihanTeng"
   comments: "croc mobile"
 
 # Android package id (wails3 task android:*)

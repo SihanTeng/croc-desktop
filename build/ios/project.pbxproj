@@ -176,7 +176,7 @@
 			buildSettings = {
 				INFOPLIST_FILE = main/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.schollz.croc-desktop";
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.sihanteng.croc-desktop";
 				PRODUCT_NAME = "croc-desktop";
 				CODE_SIGNING_ALLOWED = NO;
 				SDKROOT = iphoneos;
@@ -188,7 +188,7 @@
 			buildSettings = {
 				INFOPLIST_FILE = main/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.schollz.croc-desktop";
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.sihanteng.croc-desktop";
 				PRODUCT_NAME = "croc-desktop";
 				CODE_SIGNING_ALLOWED = NO;
 				SDKROOT = iphoneos;

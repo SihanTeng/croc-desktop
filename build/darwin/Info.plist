@@ -8,7 +8,7 @@
         <key>CFBundleExecutable</key>
             <string>croc-desktop</string>
         <key>CFBundleIdentifier</key>
-            <string>com.schollz.croc-desktop</string>
+            <string>io.github.sihanteng.croc-desktop</string>
         <key>CFBundleVersion</key>
             <string>0.2.0</string>
         <key>CFBundleGetInfoString</key>

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="build/appicon.png" alt="croc logo" width="112" height="112" />
+  <img src="build/appicon.png" alt="croc-desktop icon" width="112" height="112" />
 </p>
 
 <h1 align="center">croc-desktop</h1>
@@ -152,8 +152,8 @@ wails3 task android:run                      # emulator or adb device
 
 | | Value |
 | --- | --- |
-| iOS bundle ID | `com.schollz.croc-desktop` |
-| Android applicationId | `com.schollz.crocdesktop` (no hyphens) |
+| iOS bundle ID | `io.github.sihanteng.croc-desktop` |
+| Android applicationId | `io.github.sihanteng.crocdesktop` (no hyphens) |
 | Config | [`build/config.yml`](build/config.yml) (`ios:` block) |
 | Platform hooks | [`app_options_ios.go`](app_options_ios.go), [`app_options_android.go`](app_options_android.go) |
 
@@ -397,6 +397,12 @@ progress and prompts are events in the UI, not a spawned CLI. See `go.mod`
 
 - [croc](https://github.com/schollz/croc) by [@schollz](https://github.com/schollz) — the protocol and transfer engine
 - [Wails v3](https://v3.wails.io) — Go + web UI for desktop and mobile
+
+## License
+
+[MIT](LICENSE) © SihanTeng. croc-desktop is an **unofficial** community project
+and is not affiliated with or endorsed by the croc authors. `croc` itself is
+MIT-licensed by its respective authors.
 
 ---
 

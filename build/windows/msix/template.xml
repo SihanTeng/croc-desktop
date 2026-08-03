@@ -10,13 +10,13 @@
     <Installer
         Path="croc-desktop"
         Arguments=""
-        InstallLocation="C:\Program Files\croc\croc-desktop">
+        InstallLocation="C:\Program Files\croc-desktop">
     </Installer>
     <PackageInformation
         PackageName="croc-desktop"
         PackageDisplayName="croc-desktop"
-        PublisherName="CN=croc"
-        PublisherDisplayName="croc"
+        PublisherName="CN=SihanTeng"
+        PublisherDisplayName="SihanTeng"
         Version="0.2.0.0"
         PackageDescription="Desktop GUI for croc — encrypted peer-to-peer file transfer">
         <Capabilities>
@@ -25,7 +25,7 @@
         </Capabilities>
         <Applications>
             <Application
-                Id="com.schollz.croc-desktop"
+                Id="io.github.sihanteng.croc-desktop"
                 Description="Desktop GUI for croc — encrypted peer-to-peer file transfer"
                 DisplayName="croc-desktop"
                 ExecutableName="croc-desktop"
@@ -42,7 +42,7 @@
         <Properties>
             <Framework>false</Framework>
             <DisplayName>croc-desktop</DisplayName>
-            <PublisherDisplayName>croc</PublisherDisplayName>
+            <PublisherDisplayName>SihanTeng</PublisherDisplayName>
             <Description>Desktop GUI for croc — encrypted peer-to-peer file transfer</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>

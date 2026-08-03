@@ -8,7 +8,7 @@
     !define INFO_PROJECTNAME "croc-desktop"
 !endif
 !ifndef INFO_COMPANYNAME
-    !define INFO_COMPANYNAME "croc"
+    !define INFO_COMPANYNAME "SihanTeng"
 !endif
 !ifndef INFO_PRODUCTNAME
     !define INFO_PRODUCTNAME "croc-desktop"
@@ -17,7 +17,7 @@
     !define INFO_PRODUCTVERSION "0.2.0"
 !endif
 !ifndef INFO_COPYRIGHT
-    !define INFO_COPYRIGHT "© 2026 croc"
+    !define INFO_COPYRIGHT "© 2026 SihanTeng"
 !endif
 !ifndef PRODUCT_EXECUTABLE
     !define PRODUCT_EXECUTABLE "${INFO_PROJECTNAME}.exe"

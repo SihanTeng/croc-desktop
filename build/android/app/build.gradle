@@ -13,7 +13,7 @@ android {
     defaultConfig {
         // Product id (Play Store / package name). Must be a valid Java package
         // name (no hyphens). Java namespace stays com.wails.app (Wails bridge).
-        applicationId "com.schollz.crocdesktop"
+        applicationId "io.github.sihanteng.crocdesktop"
         minSdk 21
         targetSdk 35
         versionCode 1

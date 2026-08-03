@@ -8,14 +8,14 @@
   IgnorableNamespaces="uap3">
   
   <Identity 
-    Name="com.schollz.croc-desktop"
-    Publisher="CN=croc"
+    Name="io.github.sihanteng.croc-desktop"
+    Publisher="CN=SihanTeng"
     Version="0.2.0.0" 
     ProcessorArchitecture="x64" />
   
   <Properties>
     <DisplayName>croc-desktop</DisplayName>
-    <PublisherDisplayName>croc</PublisherDisplayName>
+    <PublisherDisplayName>SihanTeng</PublisherDisplayName>
     <Description>Desktop GUI for croc — encrypted peer-to-peer file transfer</Description>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -29,7 +29,7 @@
   </Resources>
   
   <Applications>
-    <Application Id="com.schollz.croc-desktop" Executable="croc-desktop" EntryPoint="Windows.FullTrustApplication">
+    <Application Id="io.github.sihanteng.croc-desktop" Executable="croc-desktop" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="croc-desktop"
         Description="Desktop GUI for croc — encrypted peer-to-peer file transfer"

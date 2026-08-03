@@ -5,7 +5,7 @@
     <key>CFBundleExecutable</key>
     <string>croc-desktop</string>
     <key>CFBundleIdentifier</key>
-    <string>com.schollz.croc-desktop</string>
+    <string>io.github.sihanteng.croc-desktop</string>
     <key>CFBundleName</key>
     <string>croc-desktop</string>
     <key>CFBundleDisplayName</key>
@@ -51,7 +51,7 @@
     
     
     <key>NSHumanReadableCopyright</key>
-    <string>© 2026 croc</string>
+    <string>© 2026 SihanTeng</string>
     
     
     <key>CFBundleGetInfoString</key>

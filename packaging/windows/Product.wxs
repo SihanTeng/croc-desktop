@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product Id="*"
-           Name="croc"
+           Name="croc-desktop"
            Language="1033"
            Version="0.2.0.0"
-           Manufacturer="croc"
+           Manufacturer="SihanTeng"
            UpgradeCode="8fca5e75-eb3b-4dcf-b7cc-c482df60c3fc">
 
     <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="x64"
-             Description="croc — easily and securely transfer files between computers" />
+             Description="croc-desktop — GUI for croc: encrypted peer-to-peer file transfer" />
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version of croc is already installed." />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of croc-desktop is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
     <Icon Id="croc.ico" SourceFile="build\appicon.ico" />
@@ -23,10 +23,10 @@
 
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
-        <Directory Id="INSTALLFOLDER" Name="croc" />
+        <Directory Id="INSTALLFOLDER" Name="croc-desktop" />
       </Directory>
       <Directory Id="ProgramMenuFolder">
-        <Directory Id="CrocMenuDir" Name="croc" />
+        <Directory Id="CrocMenuDir" Name="croc-desktop" />
       </Directory>
     </Directory>
 
@@ -39,13 +39,13 @@
     <ComponentGroup Id="CrocShortcuts" Directory="CrocMenuDir">
       <Component Id="CrocShortcut" Guid="*" Win64="yes">
         <Shortcut Id="CrocStartMenu"
-                  Name="croc"
+                  Name="croc-desktop"
                   Description="Transfer files between computers"
                   Target="[INSTALLFOLDER]croc-desktop.exe"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="croc.ico" />
         <RemoveFile Id="RemoveShortcut" Name="*" On="uninstall" />
-        <RegistryValue Root="HKCU" Key="Software\croc" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+        <RegistryValue Root="HKCU" Key="Software\croc-desktop" Name="installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </ComponentGroup>
   </Product>
