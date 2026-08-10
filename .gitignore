@@ -39,3 +39,4 @@ build/android/app/src/main/jniLibs/**/*.so
 build/android/app/src/main/jniLibs/**/*.h
 bin/*.apk
 *.apk
+.tools/
