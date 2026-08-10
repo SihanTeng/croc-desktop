@@ -112,13 +112,18 @@ Optional: pin a version with `VERSION=v0.2.0` (Unix) or `$env:VERSION = "v0.2.0"
 | **macOS** (Apple Silicon) | `croc-desktop_*_darwin-arm64.dmg` | Open the DMG and drag the app to Applications |
 | **Windows** | `croc-desktop_*_windows-amd64.msi` | Run the installer |
 
-### Package managers (future work)
+### Package managers
+
+**Homebrew (macOS, Apple Silicon):**
+
+```sh
+brew install --cask sihanteng/tap/croc-desktop
+```
 
 Not available yet — planned, but **not published today**:
 
 | Channel | Platform | Status |
 | --- | --- | --- |
-| **Homebrew** (cask) | macOS | Planned — tap/cask not configured yet |
 | **AUR** | Arch Linux | Planned — no package published |
 | **Fedora** (Copr / repos) | Fedora | Planned — no package published |
 
