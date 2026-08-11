@@ -16,7 +16,7 @@ vars:
   # (release.yml); locally it falls back to the latest git tag.
   GIT_VERSION:
     sh: git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true
-  VERSION: '{{.APP_VERSION | trimPrefix "v" | default .GIT_VERSION | default "0.0.0-dev"}}'
+  VERSION: '{{default "" .APP_VERSION | trimPrefix "v" | default .GIT_VERSION | default "0.0.0-dev"}}'
 
 tasks:
   build:
