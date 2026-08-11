@@ -16,6 +16,15 @@ cask "croc-desktop" do
 
   app "croc-desktop.app"
 
+  # Releases are ad-hoc signed (no Developer ID/notarization yet), and
+  # Gatekeeper refuses quarantined ad-hoc apps. Strip the quarantine
+  # attribute at install so the app opens on first try (same approach as
+  # kage's cask). Remove this once releases are notarized.
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/croc-desktop.app"]
+  end
+
   zap trash: [
     "~/.config/croc/croc-desktop.json",
     "~/.config/croc/croc-desktop-history.json",
