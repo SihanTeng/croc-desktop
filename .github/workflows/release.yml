@@ -72,13 +72,16 @@ jobs:
         run: |
           $v = "${{ github.ref_name }}" -replace '^v',''
           if ($v -notmatch '^\d+\.\d+\.\d+$') { $v = '0.0.0' }
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          # NB: use -creplace (case-sensitive); plain -replace would also
+          # match 'version="1.0"' in the XML declaration and corrupt it.
           $ij = Get-Content build/windows/info.json -Raw
-          $ij = $ij -replace '"file_version": "[^"]*"', ('"file_version": "' + $v + '"')
-          $ij = $ij -replace '"ProductVersion": "[^"]*"', ('"ProductVersion": "' + $v + '"')
-          Set-Content build/windows/info.json $ij
+          $ij = $ij -creplace '"file_version": "[^"]*"', ('"file_version": "' + $v + '"')
+          $ij = $ij -creplace '"ProductVersion": "[^"]*"', ('"ProductVersion": "' + $v + '"')
+          [System.IO.File]::WriteAllText("$PWD/build/windows/info.json", $ij, $utf8NoBom)
           $wxs = Get-Content packaging/windows/Product.wxs -Raw
-          $wxs = $wxs -replace 'Version="[0-9.]+"', ('Version="' + $v + '.0"')
-          Set-Content packaging/windows/Product.wxs $wxs
+          $wxs = $wxs -creplace '(<Product[^>]*?)Version="[0-9.]+"', ('$1Version="' + $v + '.0"')
+          [System.IO.File]::WriteAllText("$PWD/packaging/windows/Product.wxs", $wxs, $utf8NoBom)
 
       # Wails v3 builds for the host OS via Taskfile; matrix runners are
       # native (ubuntu → linux, macos → darwin, windows → windows).
