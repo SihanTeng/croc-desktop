@@ -1,5 +1,5 @@
 # Homebrew cask template for croc-desktop.
-# release.yml (publish-homebrew job) renders {{VERSION}} and {{SHA256}} from the
+# release.yml (publish-homebrew job) renders the version and sha256 from the
 # tag and the freshly built DMG, then pushes the result to
 # SihanTeng/homebrew-tap. Do not hand-edit versions here.
 cask "croc-desktop" do
