@@ -10,11 +10,11 @@
         <key>CFBundleIdentifier</key>
             <string>io.github.sihanteng.croc-desktop</string>
         <key>CFBundleVersion</key>
-            <string>0.2.0</string>
+            <string>@VERSION@</string>
         <key>CFBundleGetInfoString</key>
             <string>croc-desktop</string>
         <key>CFBundleShortVersionString</key>
-            <string>0.2.0</string>
+            <string>@VERSION@</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>CFBundleIconName</key>

@@ -5,10 +5,12 @@ import (
 	"strings"
 )
 
-// AppVersion is the croc-desktop product version (keep in sync with
-// build/config.yml info.version and frontend/package.json).
-// Override at link time: -ldflags "-X main.AppVersion=1.2.3"
-var AppVersion = "0.2.0"
+// AppVersion is the croc-desktop product version. The git tag is the single
+// source of truth: release builds inject it at link time via
+//   -ldflags "-X main.AppVersion=1.2.3"
+// (wired into build/*/Taskfile.yml as {{.VERSION}}). The fallback only shows
+// for plain `go build` / `go test` runs outside the Taskfiles.
+var AppVersion = "0.0.0-dev"
 
 // AppInfo is shown on the Settings page (version + engine + defaults).
 type AppInfo struct {

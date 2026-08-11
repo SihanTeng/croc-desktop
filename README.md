@@ -404,6 +404,19 @@ npm --prefix frontend test
 
 More detail: `e2e/README.md`, `design.md`, and Taskfiles under `build/`.
 
+**Releasing:** push a version tag — CI builds all three desktop platforms,
+publishes the GitHub Release, and updates the Homebrew cask in
+[SihanTeng/homebrew-tap](https://github.com/SihanTeng/homebrew-tap)
+(skips silently if `HOMEBREW_TAP_GITHUB_TOKEN` is unset):
+
+```sh
+git tag v0.2.1 && git push --tags
+```
+
+The tag is the single source of truth for the version: it is injected into
+the binary, the macOS bundle plist, the Windows resources, and the MSI at
+build time — no version files need manual bumps.
+
 **How it works (short):** the app depends on a croc fork with a hooks layer so
 progress and prompts are events in the UI, not a spawned CLI. See `go.mod`
 `replace` for the pin.

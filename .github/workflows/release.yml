@@ -8,6 +8,14 @@ on:
 permissions:
   contents: write
 
+# The git tag is the single source of truth for the version. The Taskfiles
+# inject it into the binary (-X main.AppVersion) and the macOS bundle plist;
+# the Windows step below stamps it into info.json and the WiX manifest.
+# Empty on non-tag runs (workflow_dispatch), where builds fall back to the
+# latest reachable git tag.
+env:
+  APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -33,6 +41,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so `git describe` (Taskfile version fallback) works.
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -52,6 +63,22 @@ jobs:
         # gtk3 tag: CLI itself links webkit; needed on Linux runners without gtk4.
         # Must run after the webview deps: -tags gtk3 shells out to pkg-config.
         run: go install -tags gtk3 github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha2.119
+
+      - name: Stamp version into Windows resources
+        # exe file properties (info.json → syso) and the MSI (Product.wxs) get
+        # the tag version; keyed regexes so no repo file needs manual bumping.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}" -replace '^v',''
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { $v = '0.0.0' }
+          $ij = Get-Content build/windows/info.json -Raw
+          $ij = $ij -replace '"file_version": "[^"]*"', ('"file_version": "' + $v + '"')
+          $ij = $ij -replace '"ProductVersion": "[^"]*"', ('"ProductVersion": "' + $v + '"')
+          Set-Content build/windows/info.json $ij
+          $wxs = Get-Content packaging/windows/Product.wxs -Raw
+          $wxs = $wxs -replace 'Version="[0-9.]+"', ('Version="' + $v + '.0"')
+          Set-Content packaging/windows/Product.wxs $wxs
 
       # Wails v3 builds for the host OS via Taskfile; matrix runners are
       # native (ubuntu → linux, macos → darwin, windows → windows).
@@ -144,3 +171,48 @@ jobs:
             | Linux (AppImage) | `croc-desktop_${{ github.ref_name }}_linux-amd64.AppImage` |
             | macOS (Apple Silicon) | `croc-desktop_${{ github.ref_name }}_darwin-arm64.dmg` |
             | Windows (MSI) | `croc-desktop_${{ github.ref_name }}_windows-amd64.msi` |
+
+  # Pushes the freshly built DMG's version+sha256 into SihanTeng/homebrew-tap.
+  # Kage-style self-disable: with no HOMEBREW_TAP_GITHUB_TOKEN secret the job
+  # is a no-op and the release still succeeds; the channel lights up the
+  # moment the secret exists (fine-grained PAT, contents:write on the tap).
+  publish-homebrew:
+    name: Publish Homebrew cask
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    env:
+      TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip notice
+        if: env.TAP_GITHUB_TOKEN == ''
+        run: echo "::notice::HOMEBREW_TAP_GITHUB_TOKEN not set — Homebrew cask not updated."
+
+      - name: Update Homebrew tap
+        if: env.TAP_GITHUB_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          gh release download "$GITHUB_REF_NAME" \
+            --repo SihanTeng/croc-desktop \
+            --pattern "*darwin-arm64.dmg" --dir /tmp/release \
+            --clobber
+          sha=$(shasum -a 256 /tmp/release/*.dmg | cut -d' ' -f1)
+          sed -e "s/{{VERSION}}/$version/g" -e "s/{{SHA256}}/$sha/g" \
+            packaging/homebrew/croc-desktop.rb.tpl > /tmp/croc-desktop.rb
+          git clone "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/SihanTeng/homebrew-tap.git" /tmp/tap
+          cp /tmp/croc-desktop.rb /tmp/tap/Casks/croc-desktop.rb
+          cd /tmp/tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/croc-desktop.rb
+          if git diff --cached --quiet; then
+            echo "Cask already up to date."
+            exit 0
+          fi
+          git commit -m "croc-desktop $version"
+          git push
