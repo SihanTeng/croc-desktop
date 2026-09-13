@@ -8,10 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/schollz/croc/v10/src/comm"
-	"github.com/schollz/croc/v10/src/croc"
-	"github.com/schollz/croc/v10/src/models"
-	"github.com/schollz/croc/v10/src/utils"
+	"github.com/schollz/croc/v11/src/comm"
+	"github.com/schollz/croc/v11/src/croc"
+	"github.com/schollz/croc/v11/src/models"
+	"github.com/schollz/croc/v11/src/utils"
 )
 
 // SavedCode is a remembered receive code (favorite), managed from the

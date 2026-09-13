@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/schollz/croc/v10/src/croc"
+	"github.com/schollz/croc/v11/src/croc"
 )
 
 // events emitted to the frontend
@@ -320,7 +320,7 @@ func (t *transferManager) cancelTransfer() {
 	// force-close connections so goroutines parked in network reads (e.g.
 	// waiting on a relay that doesn't ping) unwind immediately
 	if client != nil {
-		client.CloseConnections()
+		client.Cancel()
 	}
 }
 

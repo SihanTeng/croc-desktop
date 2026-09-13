@@ -36,7 +36,7 @@ func crocModuleVersion() string {
 		return "unknown"
 	}
 	for _, d := range bi.Deps {
-		if d.Path == "github.com/schollz/croc/v10" {
+		if d.Path == "github.com/schollz/croc/v11" {
 			v := d.Version
 			if d.Replace != nil && d.Replace.Version != "" {
 				// replaced modules often use pseudo-versions; prefer replace path tag when short

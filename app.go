@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/schollz/croc/v10/src/croc"
-	"github.com/schollz/croc/v10/src/utils"
+	"github.com/schollz/croc/v11/src/croc"
+	"github.com/schollz/croc/v11/src/utils"
 	"github.com/skip2/go-qrcode"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )

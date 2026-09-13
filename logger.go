@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/schollz/croc/v10/src/utils"
+	"github.com/schollz/croc/v11/src/utils"
 )
 
 // log levels

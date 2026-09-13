@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/schollz/croc/v10/src/comm"
-	"github.com/schollz/croc/v10/src/models"
+	"github.com/schollz/croc/v11/src/comm"
+	"github.com/schollz/croc/v11/src/models"
 )
 
 func TestSettingsRoundTrip(t *testing.T) {

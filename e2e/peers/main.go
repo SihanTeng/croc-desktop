@@ -15,9 +15,9 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/schollz/croc/v10/src/croc"
-	"github.com/schollz/croc/v10/src/models"
-	"github.com/schollz/croc/v10/src/tcp"
+	"github.com/schollz/croc/v11/src/croc"
+	"github.com/schollz/croc/v11/src/models"
+	"github.com/schollz/croc/v11/src/tcp"
 )
 
 func main() {
