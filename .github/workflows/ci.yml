@@ -73,7 +73,10 @@ jobs:
         run: go test -tags gtk3 -timeout 300s ./...
 
       - name: Race detector
-        run: go test -race -tags server -timeout 300s .
+        # Race builds enable CGO; Wails internal Linux packages still need gtk3.
+        env:
+          CROC_TEST_CLI: ${{ runner.temp }}/croc-upstream/croc
+        run: go test -race -tags server,gtk3 -timeout 300s .
 
   frontend:
     name: Frontend — format, lint, typecheck, build
