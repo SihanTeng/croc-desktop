@@ -20,7 +20,7 @@
         <key>CFBundleIconName</key>
             <string>appicon</string>
         <key>LSMinimumSystemVersion</key>
-            <string>12.0.0</string>
+            <string>13.0.0</string>
         <key>NSHighResolutionCapable</key>
             <string>true</string>
         <key>NSHumanReadableCopyright</key>

@@ -90,6 +90,7 @@
   "send.starting": "Iniciando…",
   "send.text": "Texto",
   "send.textPlaceholder": "Escribe el texto a enviar…",
+  "send.textLimit": "Hasta 1 MiB de texto. Para contenido más grande, guárdalo como archivo y envíalo.",
   "send.title": "Enviar",
   "settings.about": "Acerca de",
   "settings.crocVersion": "Motor croc",

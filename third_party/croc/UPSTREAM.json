@@ -1,0 +1,15 @@
+{
+  "module": "github.com/schollz/croc/v11",
+  "version": "v11.5.4",
+  "commit": "15a4577e56bf6bbad116576e448bd33120bd90c1",
+  "sum": "h1:PPm56ZlOzO2HYQnARoETX3aqQRinXDKvxROFt/yP0HQ=",
+  "go_mod_sum": "h1:82adowhzrBNRu0unwPlj72lzpv1dsNYwBSYA+lYGyW4=",
+  "included": [
+    "src",
+    "internal",
+    "go.mod",
+    "go.sum",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ]
+}

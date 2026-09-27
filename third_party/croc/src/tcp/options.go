@@ -1,0 +1,145 @@
+package tcp
+
+import (
+	"fmt"
+	"slices"
+	"time"
+)
+
+// TODO: maybe export from logger library?
+var availableLogLevels = []string{"info", "error", "warn", "debug", "trace"}
+
+// RoomProtocol identifies an application protocol that a relay can recognize
+// from fixed metadata without inspecting encrypted application data.
+type RoomProtocol string
+
+const (
+	// RoomProtocolSSH is croc's shared SSH terminal rendezvous protocol.
+	RoomProtocolSSH RoomProtocol = "ssh"
+)
+
+type serverOptsFunc func(s *server) error
+
+func WithBanner(banner ...string) serverOptsFunc {
+	return func(s *server) error {
+		if len(banner) > 0 {
+			s.banner = banner[0]
+		}
+		return nil
+	}
+}
+
+func WithLogLevel(level string) serverOptsFunc {
+	return func(s *server) error {
+		if !containsSlice(availableLogLevels, level) {
+			return fmt.Errorf("invalid log level specified: %s", level)
+		}
+		s.debugLevel = level
+		return nil
+	}
+}
+
+// WithMaxRoomsOpen sets the maximum number of single-occupant rooms that may
+// wait for a peer at the same time.
+func WithMaxRoomsOpen(maxRoomsOpen int) serverOptsFunc {
+	return func(s *server) error {
+		if maxRoomsOpen <= 0 {
+			return fmt.Errorf("max rooms open must be positive")
+		}
+		s.maxRoomsOpen = maxRoomsOpen
+		return nil
+	}
+}
+
+// WithMaxPendingHandshakes sets the maximum number of connections that may be
+// performing the initial relay handshake at the same time.
+func WithMaxPendingHandshakes(maxPendingHandshakes int) serverOptsFunc {
+	return func(s *server) error {
+		if maxPendingHandshakes <= 0 {
+			return fmt.Errorf("max pending handshakes must be positive")
+		}
+		s.maxPendingHandshakes = maxPendingHandshakes
+		return nil
+	}
+}
+
+// WithHandshakeTimeout sets the absolute time allowed for the initial relay
+// handshake to complete.
+func WithHandshakeTimeout(timeout time.Duration) serverOptsFunc {
+	return func(s *server) error {
+		if timeout <= 0 {
+			return fmt.Errorf("handshake timeout must be positive")
+		}
+		s.handshakeTimeout = timeout
+		return nil
+	}
+}
+
+// WithAdmissionLimits sets sliding-window room admission limits per source IP
+// and per room on this relay port.
+func WithAdmissionLimits(sourceLimit, roomLimit int, window time.Duration) serverOptsFunc {
+	return func(s *server) error {
+		if sourceLimit <= 0 {
+			return fmt.Errorf("source join limit must be positive")
+		}
+		if roomLimit <= 0 {
+			return fmt.Errorf("room join limit must be positive")
+		}
+		if window <= 0 {
+			return fmt.Errorf("join limit window must be positive")
+		}
+		s.joinLimitWindow = window
+		s.sourceJoinLimit = sourceLimit
+		s.roomJoinLimit = roomLimit
+		return nil
+	}
+}
+
+// WithRoomPairedCallback sets a callback invoked after a room's second peer
+// has joined and received confirmation. The callback must not block.
+func WithRoomPairedCallback(callback func()) serverOptsFunc {
+	return func(s *server) error {
+		s.roomPaired = callback
+		return nil
+	}
+}
+
+// WithRoomProtocolCallback sets a callback invoked once when a paired room
+// advertises a recognized application protocol. The callback must not block.
+func WithRoomProtocolCallback(callback func(RoomProtocol)) serverOptsFunc {
+	return func(s *server) error {
+		s.roomProtocol = callback
+		return nil
+	}
+}
+
+// WithFastAdmission shares one capability key and replay set across every
+// advertised port of a relay process.
+func WithFastAdmission(capabilities *RelayCapabilitySet) serverOptsFunc {
+	return func(s *server) error {
+		if capabilities == nil {
+			return fmt.Errorf("fast admission capability set is required")
+		}
+		s.fastAdmission = capabilities
+		capabilities.registerPort()
+		return nil
+	}
+}
+
+func WithRoomCleanupInterval(interval time.Duration) serverOptsFunc {
+	return func(s *server) error {
+		s.roomCleanupInterval = interval
+		return nil
+	}
+}
+
+func WithRoomTTL(ttl time.Duration) serverOptsFunc {
+	return func(s *server) error {
+		s.roomTTL = ttl
+		return nil
+	}
+}
+
+func containsSlice(s []string, e string) bool {
+	return slices.Contains(s, e)
+}

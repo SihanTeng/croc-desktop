@@ -11,7 +11,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 URL="${E2E_APP_URL:-http://localhost:34115}"
-RELAY_BASE=29309
+APP_PORT="$(node -e 'process.stdout.write(new URL(process.argv[1]).port || "80")' "$URL")"
+RELAY_BASE="${E2E_RELAY_BASE:-29309}"
 
 APP_PID=""
 RELAY_PID=""
@@ -58,7 +59,7 @@ JSON
     exit 1
   }
   (cd .. && CGO_ENABLED=0 go build -tags server -o "$SANDBOX/croc-desktop-server" .)
-  CROC_CONFIG_DIR="$SANDBOX/config" WAILS_SERVER_PORT=34115 \
+  CROC_CONFIG_DIR="$SANDBOX/config" WAILS_SERVER_PORT="$APP_PORT" \
     "$SANDBOX/croc-desktop-server" &
   APP_PID=$!
 

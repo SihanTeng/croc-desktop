@@ -1,0 +1,452 @@
+--- a/src/comm/comm.go
++++ b/src/comm/comm.go
+@@ -23,6 +23,22 @@
+ var Socks5Proxy = ""
+ var HttpProxy = ""
+ 
++// WithProxy freezes proxy configuration for an embedded transfer. Explicit
++// empty values mean direct connections; CLI callers retain the legacy globals.
++func WithProxy(ctx context.Context, socks5, http string) context.Context {
++	return context.WithValue(ctx, proxyContextKey{}, proxySettings{socks5, http})
++}
++
++type proxyContextKey struct{}
++type proxySettings struct{ socks5, http string }
++
++func proxiesForContext(ctx context.Context) proxySettings {
++	if settings, ok := ctx.Value(proxyContextKey{}).(proxySettings); ok {
++		return settings
++	}
++	return proxySettings{Socks5Proxy, HttpProxy}
++}
++
+ var MAGIC_BYTES = []byte("croc")
+ 
+ const maxReadMessageSize = 64 * 1024 * 1024
+@@ -64,9 +80,10 @@
+ 	}
+ 	defer cancel()
+ 	var connection net.Conn
+-	if Socks5Proxy != "" && !utils.IsLocalIP(address) {
++	proxies := proxiesForContext(ctx)
++	if proxies.socks5 != "" && !utils.IsLocalIP(address) {
+ 		var dialer proxy.Dialer
+-		proxyAddress := Socks5Proxy
++		proxyAddress := proxies.socks5
+ 		// prepend schema if no schema is given
+ 		if !strings.Contains(proxyAddress, `://`) {
+ 			proxyAddress = `socks5://` + proxyAddress
+@@ -85,9 +102,9 @@
+ 		}
+ 		log.Debug("dialing with dialer.Dial")
+ 		connection, err = dialProxyContext(dialCtx, dialer, "tcp", address)
+-	} else if HttpProxy != "" && !utils.IsLocalIP(address) {
++	} else if proxies.http != "" && !utils.IsLocalIP(address) {
+ 		var dialer proxy.Dialer
+-		proxyAddress := HttpProxy
++		proxyAddress := proxies.http
+ 		// prepend schema if no schema is given
+ 		if !strings.Contains(proxyAddress, `://`) {
+ 			proxyAddress = `http://` + proxyAddress
+--- a/src/croc/client_state.go
++++ b/src/croc/client_state.go
+@@ -151,6 +151,9 @@
+ func (c *Client) setProgressBar(bar *progressbar.ProgressBar) {
+ 	c.barMu.Lock()
+ 	c.bar = bar
++	if c.hooks != nil {
++		c.guiProgress = c.progressMetadata()
++	}
+ 	c.barMu.Unlock()
+ }
+ 
+@@ -160,6 +163,7 @@
+ 	c.barMu.RUnlock()
+ 	if bar != nil {
+ 		_ = bar.Add64(delta)
++		c.emitProgress(bar)
+ 	}
+ }
+ 
+@@ -169,5 +173,6 @@
+ 	c.barMu.RUnlock()
+ 	if bar != nil {
+ 		_ = bar.Finish()
++		c.emitProgress(bar)
+ 	}
+ }
+--- a/src/croc/croc.go
++++ b/src/croc/croc.go
+@@ -94,6 +94,8 @@
+ 
+ // Options specifies user specific options
+ type Options struct {
++	// DisableTailcat keeps embedded clients on their configured LAN/relay/proxy path.
++	DisableTailcat    bool
+ 	IsSender          bool
+ 	SharedSecret      string
+ 	RoomName          string
+@@ -186,6 +188,8 @@
+ 
+ // Client holds the state of the croc transfer
+ type Client struct {
++	hooks                           *Hooks
++	guiProgress                     ProgressEvent
+ 	Options                         Options
+ 	Pake                            *pake.Pake
+ 	Key                             []byte
+@@ -682,7 +686,9 @@
+ }
+ 
+ func (c *Client) markTransferStarted() {
+-	c.transferStarted.Store(true)
++	if !c.transferStarted.Swap(true) {
++		c.emitState("transferring")
++	}
+ }
+ 
+ func (c *Client) markSenderRouteReady() {
+@@ -1778,6 +1784,7 @@
+ 
+ // Send will send the specified file
+ func (c *Client) Send(filesInfo []FileInfo, emptyFoldersToTransfer []FileInfo, totalNumberFolders int) (err error) {
++	c.emitState("waiting")
+ 	defer func() { err = c.redactError(err) }()
+ 	go c.stop.done()
+ 	defer c.stop.Cancel()
+@@ -2006,6 +2013,7 @@
+ 
+ // Receive will receive a file
+ func (c *Client) Receive() (err error) {
++	c.emitState("connecting")
+ 	defer func() { err = c.redactError(err) }()
+ 	go c.stop.done()
+ 	defer c.stop.Cancel()
+@@ -2535,7 +2543,23 @@
+ 		fname = "text message"
+ 		displayName = ""
+ 	}
+-	if !c.Options.NoPrompt || c.Options.Ask || senderInfo.Ask {
++	if c.hooks != nil && c.hooks.OnAcceptRequest != nil {
++		accepted := c.hooks.OnAcceptRequest(AcceptRequest{
++			Files: append([]FileInfo(nil), c.FilesToTransfer...), TotalSize: totalSize,
++			TotalFolders: c.TotalNumberFolders, SenderID: senderInfo.MachineID,
++			IsText: c.Options.SendingText,
++		})
++		if ctxErr := c.clientContext().Err(); ctxErr != nil {
++			return true, ctxErr
++		}
++		if !accepted {
++			err = message.Send(c.connection(0), c.Key, message.Message{Type: message.TypeError, Message: "refusing files"})
++			if err != nil {
++				return false, err
++			}
++			return true, fmt.Errorf("refused files")
++		}
++	} else if !c.Options.NoPrompt || c.Options.Ask || senderInfo.Ask {
+ 		output, colorEnabled := termui.Output(os.Stderr)
+ 		if displayName != "" {
+ 			fname = quotedFilename(displayName, colorEnabled)
+@@ -2590,6 +2614,18 @@
+ 		} else {
+ 			isEmpty, _ := isEmptyFolder(c.EmptyFoldersToTransfer[i].FolderRemote)
+ 			if !isEmpty {
++				if c.hooks != nil && c.hooks.OnOverwriteRequest != nil {
++					accepted := c.hooks.OnOverwriteRequest(c.EmptyFoldersToTransfer[i].FolderRemote, 100)
++					if ctxErr := c.clientContext().Err(); ctxErr != nil {
++						return false, ctxErr
++					}
++					if accepted {
++						if err = c.createEmptyFolder(i); err != nil {
++							return
++						}
++					}
++					continue
++				}
+ 				log.Debug("asking to overwrite")
+ 				output, colorEnabled := termui.Output(os.Stderr)
+ 				fmt.Fprintf(output, "\n%s already has some content in it. \nDo you want to %s it with an empty folder? %s ",
+@@ -3021,7 +3057,16 @@
+ 		c.updateLifecycle(func(state *transferLifecycle) { state.RecipientRequested = true })
+ 		c.markTransferStarted()
+ 
+-		if c.Options.Ask {
++		if c.Options.Ask && c.hooks != nil && c.hooks.OnConfirmSendToPeer != nil {
++			accepted := c.hooks.OnConfirmSendToPeer(remoteFile.MachineID)
++			if ctxErr := c.clientContext().Err(); ctxErr != nil {
++				return true, ctxErr
++			}
++			if !accepted {
++				c.SendError()
++				return true, fmt.Errorf("refused files")
++			}
++		} else if c.Options.Ask {
+ 			output, colorEnabled := termui.Output(os.Stderr)
+ 			fmt.Fprintf(output, "Send to machine '%s'? %s ",
+ 				remoteFile.MachineID,
+@@ -3458,7 +3503,7 @@
+ 			}
+ 			if destinationExists && !c.Options.Overwrite && !c.Options.Rename && !isTextArtifact {
+ 				resumable := fileInfo.Size > 0 && fileInfo.Symlink == "" && recipientFileInfo.Mode().IsRegular()
+-				overwrite, promptErr := askReceiveOverwrite(c.clientContext(), fileInfo, resumable)
++				overwrite, promptErr := c.askReceiveOverwrite(fileInfo, resumable)
+ 				if promptErr != nil {
+ 					return promptErr
+ 				}
+@@ -3745,7 +3790,11 @@
+ 					attempt.report(closeErr)
+ 					return
+ 				}
+-				fmt.Print(string(b))
++				if c.hooks != nil && c.hooks.OnText != nil && c.Options.SendingText {
++					c.hooks.OnText(string(b))
++				} else {
++					fmt.Print(string(b))
++				}
+ 			}
+ 			log.Debug("sending close-sender")
+ 			err = message.Send(c.connection(0), c.Key, message.Message{
+--- /dev/null
++++ b/src/croc/hooks.go
+@@ -0,0 +1,87 @@
++package croc
++
++import (
++	"path"
++
++	"github.com/schollz/croc/v11/src/models"
++	"github.com/schollz/croc/v11/src/utils"
++	"github.com/schollz/progressbar/v3"
++)
++
++// Hooks bridges an embedded client to a GUI. Install before Send or Receive;
++// callbacks may run on transfer goroutines. Nil callbacks retain CLI behavior.
++// Receive metadata is validated before any acceptance callback is invoked.
++type Hooks struct {
++	OnProgress          func(ProgressEvent)
++	OnStateChange       func(string)
++	OnAcceptRequest     func(AcceptRequest) bool
++	OnOverwriteRequest  func(path string, resumePct float64) bool
++	OnConfirmSendToPeer func(machineID string) bool
++	// OnText receives the validated text instead of printing it to stdout.
++	// Croc still owns and removes the temporary receive file.
++	OnText func(string)
++}
++
++type ProgressEvent struct {
++	Filename   string `json:"filename"`
++	BytesDone  int64  `json:"bytesDone"`
++	BytesTotal int64  `json:"bytesTotal"`
++	FilesDone  int    `json:"filesDone"`
++	FilesTotal int    `json:"filesTotal"`
++}
++
++type AcceptRequest struct {
++	Files        []FileInfo
++	TotalSize    int64
++	TotalFolders int
++	SenderID     string
++	IsText       bool
++}
++
++func (c *Client) SetHooks(h *Hooks) { c.hooks = h }
++
++func (c *Client) emitState(state string) {
++	if c.hooks != nil && c.hooks.OnStateChange != nil {
++		c.hooks.OnStateChange(state)
++	}
++}
++
++// Snapshot metadata when the control loop installs a bar. Data workers must
++// not read the control loop's mutable file index or completion map.
++func (c *Client) progressMetadata() ProgressEvent {
++	event := ProgressEvent{FilesDone: c.FilesToTransferCurrentNum, FilesTotal: len(c.FilesToTransfer)}
++	if i := c.FilesToTransferCurrentNum; i >= 0 && i < len(c.FilesToTransfer) {
++		event.Filename = c.FilesToTransfer[i].Name
++		event.BytesTotal = c.FilesToTransfer[i].Size
++	}
++	return event
++}
++
++func (c *Client) emitProgress(bar *progressbar.ProgressBar) {
++	if c.hooks == nil || c.hooks.OnProgress == nil || bar == nil {
++		return
++	}
++	c.barMu.RLock()
++	event, current := c.guiProgress, c.bar == bar
++	c.barMu.RUnlock()
++	if !current {
++		return
++	}
++	event.BytesDone = int64(bar.State().CurrentBytes)
++	c.hooks.OnProgress(event)
++}
++
++func (c *Client) askReceiveOverwrite(fileInfo FileInfo, resumable bool) (bool, error) {
++	if c.hooks == nil || c.hooks.OnOverwriteRequest == nil {
++		return askReceiveOverwrite(c.clientContext(), fileInfo, resumable)
++	}
++	percent := float64(100)
++	destination := path.Join(fileInfo.FolderRemote, fileInfo.Name)
++	if resumable {
++		ranges := utils.MissingChunks(destination, fileInfo.Size, models.TCP_BUFFER_SIZE/2)
++		missing := utils.ChunkRangesBytes(ranges, fileInfo.Size, models.TCP_BUFFER_SIZE/2)
++		percent = 100 - float64(missing)/float64(fileInfo.Size)*100
++	}
++	accepted := c.hooks.OnOverwriteRequest(destination, percent)
++	return accepted, c.clientContext().Err()
++}
+--- /dev/null
++++ b/src/croc/hooks_test.go
+@@ -0,0 +1,108 @@
++package croc
++
++import (
++	"bytes"
++	"math"
++	"os"
++	"testing"
++
++	"github.com/schollz/croc/v11/src/models"
++)
++
++func TestDesktopHookRunsAfterReceiveValidation(t *testing.T) {
++	for _, tc := range []struct {
++		name string
++		file FileInfo
++		text bool
++	}{
++		{"text filename", FileInfo{Name: "croc-text-test", FolderRemote: ".", Size: 1}, true},
++		{"text size", FileInfo{Name: "croc-stdin-test", FolderRemote: ".", Size: maxTextTransferBytes + 1}, true},
++		{"traversal", FileInfo{Name: "outside", FolderRemote: "../", Size: 1}, false},
++		{"symlink", FileInfo{Name: "link", FolderRemote: ".", Symlink: "../../outside"}, false},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			client := &Client{Options: Options{NoPrompt: true}}
++			called := false
++			client.SetHooks(&Hooks{OnAcceptRequest: func(AcceptRequest) bool { called = true; return true }})
++			done, err := client.processSenderInfo(SenderInfo{FilesToTransfer: []FileInfo{tc.file}, SendingText: tc.text})
++			if err == nil || !done {
++				t.Fatalf("unsafe offer accepted: done=%v, err=%v", done, err)
++			}
++			if called {
++				t.Fatal("unsafe metadata reached the GUI acceptance callback")
++			}
++		})
++	}
++}
++
++func TestDesktopRelayOnlyDoesNotAdvertiseTailcat(t *testing.T) {
++	client := &Client{Options: Options{DisableTailcat: true}}
++	if client.localTailcatSupported() {
++		t.Fatal("relay-only client advertises Tailcat")
++	}
++	client.startTailcatPreparation()
++	if client.tailcat.prepareReady != nil {
++		t.Fatal("relay-only client started Tailcat preparation")
++	}
++}
++
++func TestDesktopDeclinedArchiveSurvivesReconnect(t *testing.T) {
++	t.Chdir(t.TempDir())
++	writeTestZip(t, "keep.zip", map[string]string{"mine.txt": "mine"})
++	original, err := os.ReadFile("keep.zip")
++	if err != nil {
++		t.Fatal(err)
++	}
++	offered := FileInfo{Name: "keep.zip", FolderRemote: ".", Size: 99999, TempFile: true}
++	client := overwriteTestClient(t, offered, Options{HashAlgorithm: defaultHashAlgorithm, NoPrompt: true})
++	prompts := 0
++	client.SetHooks(&Hooks{
++		OnAcceptRequest: func(AcceptRequest) bool { return true },
++		OnOverwriteRequest: func(string, float64) bool {
++			prompts++
++			return false
++		},
++	})
++	if err := client.updateIfRecipientHasFileInfo(); err != nil {
++		t.Fatal(err)
++	}
++	client.resetLifecycle()
++	if _, err := client.processSenderInfo(SenderInfo{FilesToTransfer: []FileInfo{offered}}); err != nil {
++		t.Fatal(err)
++	}
++	if err := client.extractReceivedArchives(); err != nil {
++		t.Fatal(err)
++	}
++	if prompts != 1 {
++		t.Fatalf("overwrite prompts = %d, want exactly one", prompts)
++	}
++	got, err := os.ReadFile("keep.zip")
++	if err != nil || !bytes.Equal(got, original) {
++		t.Fatalf("declined archive was changed or removed: %v", err)
++	}
++	if _, err := os.Stat("mine.txt"); !os.IsNotExist(err) {
++		t.Fatalf("declined archive was extracted: %v", err)
++	}
++}
++
++func TestDesktopResumePercentage(t *testing.T) {
++	t.Chdir(t.TempDir())
++	chunk := models.TCP_BUFFER_SIZE / 2
++	payload := append(bytes.Repeat([]byte{1}, 2*chunk), make([]byte, chunk)...)
++	if err := os.WriteFile("partial.bin", payload, 0600); err != nil {
++		t.Fatal(err)
++	}
++	client := &Client{}
++	called := false
++	client.SetHooks(&Hooks{OnOverwriteRequest: func(name string, percent float64) bool {
++		called = true
++		if name != "partial.bin" || math.Abs(percent-200.0/3) > 0.01 {
++			t.Errorf("resume prompt = %q %.2f%%, want partial.bin 66.67%%", name, percent)
++		}
++		return true
++	}})
++	accepted, err := client.askReceiveOverwrite(FileInfo{Name: "partial.bin", FolderRemote: ".", Size: int64(len(payload))}, true)
++	if err != nil || !accepted || !called {
++		t.Fatalf("resume response = %v, %v; callback=%v", accepted, err, called)
++	}
++}
+--- a/src/croc/tailcat_negotiation.go
++++ b/src/croc/tailcat_negotiation.go
+@@ -221,7 +221,7 @@
+ }
+ 
+ func (c *Client) localTailcatSupported() bool {
+-	if c.Options.Transport == TransportRelay || c.Options.OnlyLocal || !c.dataTransport().Available() {
++	if c.Options.DisableTailcat || c.Options.Transport == TransportRelay || c.Options.OnlyLocal || !c.dataTransport().Available() {
+ 		return false
+ 	}
+ 	if !c.Options.IsSender || c.Options.Transport == TransportDERP {
+@@ -289,7 +289,7 @@
+ func (c *Client) startTailcatPreparation() {
+ 	dataTransport := c.dataTransport()
+ 	transport, ok := dataTransport.(tailcatPreparingTransport)
+-	if !ok || !dataTransport.Available() || c.Options.Transport == TransportRelay || c.Options.OnlyLocal {
++	if c.Options.DisableTailcat || !ok || !dataTransport.Available() || c.Options.Transport == TransportRelay || c.Options.OnlyLocal {
+ 		return
+ 	}
+ 	if c.Options.Transport == TransportAuto && c.tailcat.transferBytes.Load() < autoTailcatThresholdBytes {
+--- a/src/croc/terminal_display.go
++++ b/src/croc/terminal_display.go
+@@ -41,6 +41,9 @@
+ }
+ 
+ func (c *Client) setReceiveStatus(status string) {
++	if c.hooks != nil {
++		return
++	}
+ 	output, _ := termui.Output(os.Stderr)
+ 	c.receiveStatusWidth = writeReceiveStatus(output, c.receiveStatusWidth, status)
+ }
+@@ -56,6 +59,10 @@
+ 
+ func (c *Client) newProgressBar(max int64, description string, throttle time.Duration) *progressbar.ProgressBar {
+ 	output, colorEnabled := termui.Output(os.Stderr)
++	if c.hooks != nil {
++		output = io.Discard
++		colorEnabled = false
++	}
+ 	return termui.NewProgress(termui.ProgressConfig{
+ 		Max:          max,
+ 		Description:  termui.ProgressDescription("", description, colorEnabled),

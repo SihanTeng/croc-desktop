@@ -90,6 +90,7 @@
   "send.starting": "開始中…",
   "send.text": "テキスト",
   "send.textPlaceholder": "送信するテキストを入力…",
+  "send.textLimit": "テキストは最大 1 MiB です。それ以上の内容はファイルに保存して送信してください。",
   "send.title": "送信",
   "settings.about": "このアプリについて",
   "settings.crocVersion": "croc エンジン",

@@ -132,13 +132,18 @@ func (a *App) StartSend(paths []string) (string, error) {
 	return a.startSend(paths, "", nil)
 }
 
+const maxTextTransferBytes = 1 << 20
+
 // StartSendText sends a text snippet; it is wrapped in a temp file, matching
 // the CLI's --text behavior.
 func (a *App) StartSendText(text string) (string, error) {
 	if strings.TrimSpace(text) == "" {
 		return "", fmt.Errorf("no text to send")
 	}
-	f, err := os.CreateTemp("", "croc-text-")
+	if len(text) > maxTextTransferBytes {
+		return "", fmt.Errorf("text exceeds 1 MiB; save it as a file and use Send files")
+	}
+	f, err := os.CreateTemp("", "croc-stdin-")
 	if err != nil {
 		return "", err
 	}
@@ -166,12 +171,12 @@ func (a *App) startSend(paths []string, sendText string, cleanup func()) (string
 	}
 	a.settingsMu.Lock()
 	opts := buildCrocOptions(a.settings, true)
-	applyProxySettings(a.settings)
+	ctx = withProxySettings(ctx, a.settings)
 	a.settingsMu.Unlock()
 	opts.SharedSecret = utils.GetRandomName()
 	opts.SendingText = sendText != ""
 
-	filesInfo, emptyFolders, totalFolders, err := croc.GetFilesInfoWithExactExclusions(paths, opts.ZipFolder, false, opts.Exclude, nil)
+	filesInfo, emptyFolders, totalFolders, err := croc.GetFilesInfoWithExactExclusionsContext(ctx, paths, opts.ZipFolder, false, opts.Exclude, nil)
 	if err != nil {
 		a.tm.reset()
 		a.logError("transfer", "send failed to start: %s", err)
@@ -242,7 +247,7 @@ func (a *App) StartReceive(code string, outDir string) error {
 	}
 	a.settingsMu.Lock()
 	opts := buildCrocOptions(a.settings, false)
-	applyProxySettings(a.settings)
+	ctx = withProxySettings(ctx, a.settings)
 	a.settingsMu.Unlock()
 	opts.SharedSecret = code
 

@@ -1,28 +1,35 @@
-# golangci-lint configuration for croc-desktop.
-# Run: golangci-lint run ./...
-
+version: "2"
 run:
   timeout: 5m
   tests: true
-
 linters:
-  disable-all: true
+  default: none
   enable:
-    - errcheck      # unchecked errors
-    - govet         # go vet suspicious constructs
-    - ineffassign   # assignments that are never used
-    - staticcheck   # bugs + performance + style (SA/S/ST checks)
-    - unused        # unused code
-    - misspell      # common misspellings
-    - gofmt         # not gofmt-formatted
-    - goimports     # import grouping/formatting
-    - gosimple      # simplifiable code
-
-issues:
-  # quiet the noisier stylistic checks for this codebase
-  exclude-use-default: false
-  exclude-rules:
-    # tests intentionally keep some unused fields/helpers
-    - path: _test\.go
-      linters:
-        - unused
+    - errcheck
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unused
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - unused
+        path: _test\.go
+    paths:
+      - ^third_party/
+      - (^|/)node_modules/
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - ^third_party/
+      - (^|/)node_modules/
+      - builtin$
+      - examples$

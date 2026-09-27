@@ -90,6 +90,7 @@
   "send.starting": "Starting…",
   "send.text": "Text",
   "send.textPlaceholder": "Type the text to send…",
+  "send.textLimit": "Up to 1 MiB of text. For larger content, save it as a file and use Send files.",
   "send.title": "Send",
   "settings.about": "About",
   "settings.crocVersion": "croc engine",

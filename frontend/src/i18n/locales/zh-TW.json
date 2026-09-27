@@ -90,6 +90,7 @@
   "send.starting": "正在啟動…",
   "send.text": "文字",
   "send.textPlaceholder": "輸入要傳送的文字…",
+  "send.textLimit": "文字最多 1 MiB。更多內容請儲存為檔案後傳送。",
   "send.title": "傳送",
   "settings.about": "關於",
   "settings.crocVersion": "croc 引擎",
