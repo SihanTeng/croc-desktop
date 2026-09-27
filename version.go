@@ -7,7 +7,9 @@ import (
 
 // AppVersion is the croc-desktop product version. The git tag is the single
 // source of truth: release builds inject it at link time via
-//   -ldflags "-X main.AppVersion=1.2.3"
+//
+//	-ldflags "-X main.AppVersion=1.2.3"
+//
 // (wired into build/*/Taskfile.yml as {{.VERSION}}). The fallback only shows
 // for plain `go build` / `go test` runs outside the Taskfiles.
 var AppVersion = "0.0.0-dev"
@@ -36,9 +38,9 @@ func crocModuleVersion() string {
 		return "unknown"
 	}
 	for _, d := range bi.Deps {
-		if d.Path == "github.com/schollz/croc/v10" {
+		if d.Path == "github.com/schollz/croc/v11" {
 			v := d.Version
-			if d.Replace != nil && d.Replace.Version != "" {
+			if d.Replace != nil && d.Replace.Version != "" && d.Replace.Version != "(devel)" {
 				// replaced modules often use pseudo-versions; prefer replace path tag when short
 				v = d.Replace.Version
 			}
@@ -48,7 +50,7 @@ func crocModuleVersion() string {
 	// When running `go test` / some builds the main module path may list croc
 	// only via replace; fall back to the go.mod requirement if present.
 	for _, d := range bi.Deps {
-		if strings.Contains(d.Path, "croc") && strings.Contains(d.Path, "v10") {
+		if strings.Contains(d.Path, "croc") && strings.Contains(d.Path, "v11") {
 			return d.Version
 		}
 	}

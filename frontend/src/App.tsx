@@ -93,6 +93,7 @@ function TabIcon({ name }: { name: string }) {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("send");
+  const [crocVersion, setCrocVersion] = useState("");
   const transfer = useTransfer();
   const t = useT();
 
@@ -103,6 +104,12 @@ export default function App() {
         applyTheme(s.theme);
         setLanguage(s.language);
       })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    Backend.GetAppInfo()
+      .then((info) => setCrocVersion(info.crocVersion))
       .catch(() => {});
   }, []);
 
@@ -146,7 +153,7 @@ export default function App() {
           <Logo />
         </div>
         <nav className="rail-nav">{navButtons}</nav>
-        <div className="rail-foot">croc v10</div>
+        <div className="rail-foot">croc{crocVersion ? ` ${crocVersion}` : ""}</div>
       </aside>
 
       <main className="content">

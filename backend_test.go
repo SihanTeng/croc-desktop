@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -9,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/schollz/croc/v11/src/tcp"
 )
 
 // These tests drive the real GUI backend (App methods + croc.Hooks wiring)
@@ -17,10 +20,24 @@ import (
 var testRelayPorts = []string{"11009", "11010", "11011", "11012"}
 
 func TestMain(m *testing.M) {
-	rm := newRelayManager()
-	if err := rm.start(testRelayPorts, "pass123"); err != nil {
-		fmt.Println("starting test relay:", err)
-		os.Exit(1)
+	// Never load or overwrite the developer's settings, logs, or history.
+	configDir, err := os.MkdirTemp("", "croc-desktop-tests-")
+	if err != nil {
+		panic(err)
+	}
+	if err := os.Setenv("CROC_CONFIG_DIR", configDir); err != nil {
+		panic(err)
+	}
+	// The suite intentionally bursts many transfers from one loopback IP.
+	// Raise limits on this test-only relay; production retains upstream limits.
+	relayCtx, stopRelay := context.WithCancel(context.Background())
+	for _, port := range testRelayPorts {
+		go func(port string) {
+			_ = tcp.RunWithOptionsAsync("127.0.0.1", port, "pass123",
+				tcp.WithCtx(relayCtx), tcp.WithLogLevel("error"),
+				tcp.WithBanner(strings.Join(testRelayPorts[1:], ",")),
+				tcp.WithAdmissionLimits(10000, 10000, time.Minute))
+		}(port)
 	}
 	for _, p := range testRelayPorts {
 		if err := waitForPort(p, 10*time.Second); err != nil {
@@ -28,7 +45,10 @@ func TestMain(m *testing.M) {
 			os.Exit(1)
 		}
 	}
-	os.Exit(m.Run())
+	code := m.Run()
+	stopRelay()
+	_ = os.RemoveAll(configDir)
+	os.Exit(code)
 }
 
 func waitForPort(port string, timeout time.Duration) error {
@@ -241,7 +261,7 @@ func TestFileTransfer(t *testing.T) {
 func TestTextTransfer(t *testing.T) {
 	const message = "hello from the croc gui 🐊"
 
-	sender, _ := newTestApp()
+	sender, senderLog := newTestApp()
 	receiver, receiverLog := newTestApp()
 	receiverLog.onAccept = func() { receiver.RespondAccept(true) }
 
@@ -256,6 +276,7 @@ func TestTextTransfer(t *testing.T) {
 	}
 
 	p := waitDone(t, receiverLog, "text receive")
+	waitDone(t, senderLog, "text send")
 	if !p.IsText {
 		t.Fatal("expected done payload to be marked as text")
 	}

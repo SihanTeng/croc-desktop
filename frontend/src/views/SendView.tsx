@@ -161,14 +161,19 @@ export default function SendView({ transfer }: { transfer: TransferModel }) {
           )}
         </>
       ) : (
-        <textarea
-          className="text-input"
-          placeholder={t("send.textPlaceholder")}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.ctrlKey || e.metaKey) && text.trim() && start()}
-          rows={6}
-        />
+        <>
+          <textarea
+            className="text-input"
+            placeholder={t("send.textPlaceholder")}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) =>
+              e.key === "Enter" && (e.ctrlKey || e.metaKey) && text.trim() && start()
+            }
+            rows={6}
+          />
+          <p className="hint">{t("send.textLimit")}</p>
+        </>
       )}
 
       {startError && <p className="error-text">{startError}</p>}

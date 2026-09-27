@@ -97,7 +97,7 @@ irm https://raw.githubusercontent.com/SihanTeng/croc-desktop/main/install.ps1 | 
 | Platform | What the script installs | Notes |
 | --- | --- | --- |
 | **Linux** (amd64) | AppImage → `~/.local/bin/croc-desktop` | Adds a desktop menu entry; ensure `~/.local/bin` is on `PATH` |
-| **macOS** (Apple Silicon) | DMG → `/Applications` | Ad-hoc signed — first open may need **Privacy & Security → Open Anyway** |
+| **macOS 13+** (Apple Silicon) | DMG → `/Applications` | Ad-hoc signed — first open may need **Privacy & Security → Open Anyway** |
 | **Windows** (x64) | MSI via `msiexec` | May prompt for administrator approval |
 
 Optional: pin a version with `VERSION=v0.2.0` (Unix) or `$env:VERSION = "v0.2.0"` (PowerShell) before the one-liner.
@@ -109,7 +109,7 @@ Optional: pin a version with `VERSION=v0.2.0` (Unix) or `$env:VERSION = "v0.2.0"
 | Platform | File | Tips |
 | --- | --- | --- |
 | **Linux** | `croc-desktop_*_linux-amd64.AppImage` | `chmod +x` the file, then double-click or run it |
-| **macOS** (Apple Silicon) | `croc-desktop_*_darwin-arm64.dmg` | Open the DMG and drag the app to Applications |
+| **macOS 13+** (Apple Silicon) | `croc-desktop_*_darwin-arm64.dmg` | Open the DMG and drag the app to Applications |
 | **Windows** | `croc-desktop_*_windows-amd64.msi` | Run the installer |
 
 ### Package managers
@@ -202,6 +202,13 @@ bottom-tab layout without a phone.
 - **Send again** — re-send the same files or text without re-picking.
 - **Settings** — theme (light / dark / system), language, custom relays, proxies, and more.
 - **Relay** — optionally host a relay from the app for locked-down networks.
+
+## croc engine compatibility
+
+This build uses **croc v11.5.4**. Both devices need croc v11; older desktop
+versions using v10 must be upgraded. Codes now use three words, and text messages
+are limited to 1 MiB. See [migration behavior and verification](docs/croc-v11-migration.md)
+for details, including preserved relay/proxy routing.
 
 ## Features
 

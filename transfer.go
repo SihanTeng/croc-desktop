@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/schollz/croc/v10/src/croc"
+	"github.com/schollz/croc/v11/src/croc"
 )
 
 // events emitted to the frontend
@@ -79,8 +78,9 @@ type transferManager struct {
 	acceptChan    chan bool
 	overwriteChan chan bool
 
-	lastAccept *acceptPayload
-	receiveDir string
+	receivedText *string
+	lastAccept   *acceptPayload
+	receiveDir   string
 
 	// history records every transfer outcome; send-side metadata below is
 	// captured at start since the accept payload only exists on the receiver
@@ -119,6 +119,7 @@ func (t *transferManager) tryStart(isSender bool) (context.Context, error) {
 	t.declined = false
 	t.isSender = isSender
 	t.lastAccept = nil
+	t.receivedText = nil
 	t.client = nil
 	t.sendFiles = nil
 	t.sendTotalFiles = 0
@@ -154,6 +155,7 @@ func (t *transferManager) reset() {
 func (t *transferManager) finish(err error) {
 	t.mu.Lock()
 	accept := t.lastAccept
+	text := t.receivedText
 	dir := t.receiveDir
 	cancelRequested := t.cancelRequested
 	declined := t.declined
@@ -164,6 +166,7 @@ func (t *transferManager) finish(err error) {
 	sendText := t.sendText
 	history := t.history
 	t.lastAccept = nil
+	t.receivedText = nil
 	t.sendFiles = nil
 	t.sendTotalFiles = 0
 	t.sendTotalSize = 0
@@ -187,16 +190,11 @@ func (t *transferManager) finish(err error) {
 			errMsg = friendlyTransferError(errMsg)
 		}
 	default:
-		// for received text, read it back so the UI can show it inline, then
-		// remove the wrapper file (matching the CLI, which doesn't keep it)
-		if accept != nil && accept.IsText && len(accept.Files) > 0 {
-			textFile := filepath.Join(dir, accept.Files[0].Folder, accept.Files[0].Name)
-			b, rerr := os.ReadFile(textFile)
-			if rerr == nil {
-				payload.IsText = true
-				payload.Text = string(b)
-				_ = os.Remove(textFile)
-			}
+		// Croc validates and reads text inside its receive root, then removes
+		// its temporary file. Capture the callback instead of reopening it.
+		if accept != nil && accept.IsText && text != nil {
+			payload.IsText = true
+			payload.Text = *text
 		}
 		// include the received files so the UI can display them; text transfers
 		// show the message inline instead
@@ -241,6 +239,10 @@ func (t *transferManager) finish(err error) {
 // messages; unknown errors pass through unchanged.
 func friendlyTransferError(msg string) string {
 	switch {
+	case strings.Contains(msg, "unsupported PAKE protocol version"):
+		return "The other device uses an incompatible croc version — update both devices to croc v11 or newer"
+	case strings.Contains(msg, "relay admission rate limited"):
+		return "The relay is receiving too many connection attempts — wait a minute and try again"
 	case strings.Contains(msg, "password mismatch"):
 		return "The relay rejected the connection (password mismatch) — check the relay password in Settings"
 	case strings.Contains(msg, "could not secure channel"):
@@ -320,7 +322,7 @@ func (t *transferManager) cancelTransfer() {
 	// force-close connections so goroutines parked in network reads (e.g.
 	// waiting on a relay that doesn't ping) unwind immediately
 	if client != nil {
-		client.CloseConnections()
+		client.Cancel()
 	}
 }
 
@@ -395,6 +397,11 @@ func (t *transferManager) setReceiveDir(dir string) {
 // frontend.
 func (t *transferManager) hooks() *croc.Hooks {
 	return &croc.Hooks{
+		OnText: func(text string) {
+			t.mu.Lock()
+			t.receivedText = &text
+			t.mu.Unlock()
+		},
 		OnProgress: func(p croc.ProgressEvent) {
 			t.emitEvent(eventProgress, p)
 		},

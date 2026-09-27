@@ -1,0 +1,3107 @@
+package croc
+
+import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"math/rand"
+	"net"
+	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+	"unicode/utf8"
+
+	"github.com/schollz/croc/v11/src/comm"
+	log "github.com/schollz/croc/v11/src/logger"
+	"github.com/schollz/croc/v11/src/message"
+	"github.com/schollz/croc/v11/src/models"
+	"github.com/schollz/croc/v11/src/pakekey"
+	"github.com/schollz/croc/v11/src/tcp"
+	"github.com/schollz/peerdiscovery"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestReceiveControlFrameSkipsRelayKeepalives(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	client := comm.New(clientConn)
+	server := comm.New(serverConn)
+	defer client.Close()
+	defer server.Close()
+
+	written := make(chan error, 1)
+	go func() {
+		if err := server.Send([]byte{1}); err != nil {
+			written <- err
+			return
+		}
+		written <- server.Send([]byte("control-response"))
+	}()
+
+	got, err := receiveControlFrame(client)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("control-response"), got)
+	assert.NoError(t, <-written)
+}
+
+var benchmarkChunkOffsetSum int64
+
+func BenchmarkSenderChunkScheduling(b *testing.B) {
+	const fileSize = int64(256 * 1024 * 1024)
+	const connections = int64(16)
+	const chunkSize = int64(models.TCP_BUFFER_SIZE / 2)
+	chunks := fileSize / chunkSize
+
+	b.Run("legacy-every-connection-scans-file", func(b *testing.B) {
+		var sum int64
+		b.ReportMetric(float64(chunks*connections), "positions/op")
+		for n := 0; n < b.N; n++ {
+			for connection := range connections {
+				for chunk := range chunks {
+					if chunk%connections == connection {
+						sum += chunk * chunkSize
+					}
+				}
+			}
+		}
+		benchmarkChunkOffsetSum = sum
+	})
+	b.Run("partitioned-stride", func(b *testing.B) {
+		var sum int64
+		b.ReportMetric(float64(chunks), "positions/op")
+		stride := chunkSize * connections
+		for n := 0; n < b.N; n++ {
+			for connection := range connections {
+				for offset := connection * chunkSize; offset < fileSize; offset += stride {
+					sum += offset
+				}
+			}
+		}
+		benchmarkChunkOffsetSum = sum
+	})
+}
+
+func BenchmarkReceiveChunkWrites(b *testing.B) {
+	const connections = 8
+	const chunkSize = models.TCP_BUFFER_SIZE / 2
+	chunk := bytes.Repeat([]byte("w"), chunkSize)
+	file, err := os.CreateTemp(b.TempDir(), "receive-write-*.bin")
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer file.Close()
+	if err := file.Truncate(connections * chunkSize); err != nil {
+		b.Fatal(err)
+	}
+	b.SetBytes(connections * chunkSize)
+
+	runWrites := func(lock *sync.Mutex) {
+		var wg sync.WaitGroup
+		wg.Add(connections)
+		for connection := range connections {
+			go func(offset int64) {
+				defer wg.Done()
+				if lock != nil {
+					lock.Lock()
+					defer lock.Unlock()
+				}
+				if _, err := file.WriteAt(chunk, offset); err != nil {
+					panic(err)
+				}
+			}(int64(connection * chunkSize))
+		}
+		wg.Wait()
+	}
+
+	b.Run("legacy-lock-around-write", func(b *testing.B) {
+		var lock sync.Mutex
+		for i := 0; i < b.N; i++ {
+			runWrites(&lock)
+		}
+	})
+	b.Run("parallel-write-at", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			runWrites(nil)
+		}
+	})
+}
+
+func TestPerFileCompressionNegotiationFallsBackForLegacyPeers(t *testing.T) {
+	client := &Client{
+		FilesToTransfer:           []FileInfo{{IsCompressed: false}},
+		FilesToTransferCurrentNum: 0,
+	}
+	assert.True(t, client.currentFileUsesCompression(), "legacy peers expect global compression")
+
+	client.peerPerFileCompression = true
+	assert.False(t, client.currentFileUsesCompression(), "negotiated peers honor the per-file flag")
+	client.FilesToTransfer[0].IsCompressed = true
+	assert.True(t, client.currentFileUsesCompression())
+
+	client.Options.NoCompress = true
+	assert.False(t, client.currentFileUsesCompression(), "global disable always wins")
+	assert.True(t, supportsFeature([]string{"other", perFileCompressionFeature}, perFileCompressionFeature))
+}
+
+func TestWebReceiveURL(t *testing.T) {
+	assert.Equal(
+		t,
+		"https://getcroc.com/?code=1234-word%2Fword%3F%26",
+		webReceiveURL("1234-word/word?&"),
+	)
+}
+
+func TestClientErrorsRedactSharedCodeAndDerivedSecrets(t *testing.T) {
+	sentinel := errors.New("sentinel")
+	client := &Client{
+		Options:        Options{SharedSecret: "film-alibi-jet", RoomName: "derived-room"},
+		pakePassphrase: "alibi-jet",
+		baseRoomName:   "base-room",
+	}
+	err := client.redactError(fmt.Errorf(
+		"code film-alibi-jet passphrase alibi-jet rooms derived-room base-room: %w",
+		sentinel,
+	))
+	for _, secret := range []string{"film-alibi-jet", "alibi-jet", "derived-room", "base-room"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("secret %q remained in error: %q", secret, err)
+		}
+	}
+	if !errors.Is(err, sentinel) {
+		t.Fatal("redaction lost error identity")
+	}
+}
+
+func TestRejectsUnsupportedPeerPakeVersion(t *testing.T) {
+	client := &Client{}
+	for _, test := range []struct {
+		name string
+		call func() error
+	}{
+		{
+			name: "setup",
+			call: func() error {
+				return client.processMessagePake(message.Message{Type: message.TypePAKE}, nil)
+			},
+		},
+		{
+			name: "confirmation",
+			call: func() error {
+				return client.processMessagePakeConfirm(message.Message{Type: message.TypePAKEConfirm}, nil)
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var versionErr incompatiblePakeVersionError
+			if err := test.call(); !errors.As(err, &versionErr) {
+				t.Fatalf("expected incompatible version error, got %v", err)
+			}
+			if !strings.Contains(versionErr.Error(), "upgrade both croc clients") {
+				t.Fatalf("version error is not actionable: %v", versionErr)
+			}
+		})
+	}
+}
+
+func TestLocalIPExchangeRequiresAuthenticatedEncryption(t *testing.T) {
+	key := bytes.Repeat([]byte{0x42}, 32)
+	ciphertext, err := encryptLocalProbePayload(key, ipRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(ciphertext, ipRequest) || bytes.Equal(ciphertext, ipRequest) {
+		t.Fatalf("local IP request was visible in ciphertext: %x", ciphertext)
+	}
+	plaintext, err := decryptLocalProbePayload(key, ciphertext)
+	if err != nil || !bytes.Equal(plaintext, ipRequest) {
+		t.Fatalf("local IP request round trip = %q, %v", plaintext, err)
+	}
+	if _, err = encryptLocalProbePayload(nil, ipRequest); err == nil {
+		t.Fatal("local IP request was allowed before PAKE authentication")
+	}
+	if _, err = decryptLocalProbePayload(nil, ciphertext); err == nil {
+		t.Fatal("local IP response was allowed before PAKE authentication")
+	}
+}
+
+func TestFailedPakeConfirmationDoesNotActivateSecureChannel(t *testing.T) {
+	client := &Client{
+		pakeConfirmationPending: true,
+		pakeKeys: pakekey.Keys{
+			EncryptionKey: make([]byte, 32),
+			ConfirmationB: bytes.Repeat([]byte{0x22}, 32),
+		},
+	}
+	err := client.processMessagePakeConfirm(message.Message{
+		Type:    message.TypePAKEConfirm,
+		Version: pakekey.ProtocolVersion,
+		Bytes:   bytes.Repeat([]byte{0x23}, 32),
+	}, nil)
+	if err == nil || !strings.Contains(err.Error(), "confirmation failed") {
+		t.Fatalf("confirmation error = %v", err)
+	}
+	if client.Key != nil || client.dataAEAD != nil || !client.pakeConfirmationPending {
+		t.Fatal("failed confirmation activated or cleared the pending secure channel")
+	}
+}
+
+func TestDiscoverReceivePeersTimesOut(t *testing.T) {
+	oldDiscover := peerDiscover
+	oldTimeout := receivePeerDiscoveryTimeout
+	oldTimeLimit := receivePeerDiscoveryTimeLimit
+	defer func() {
+		peerDiscover = oldDiscover
+		receivePeerDiscoveryTimeout = oldTimeout
+		receivePeerDiscoveryTimeLimit = oldTimeLimit
+	}()
+
+	receivePeerDiscoveryTimeout = 10 * time.Millisecond
+	receivePeerDiscoveryTimeLimit = time.Hour
+	peerDiscover = func(settings ...peerdiscovery.Settings) ([]peerdiscovery.Discovered, error) {
+		<-settings[0].StopChan
+		return nil, nil
+	}
+
+	c := &Client{
+		Options: Options{
+			MulticastAddress: "239.255.255.250",
+		},
+		stop: newStop(context.Background()),
+	}
+
+	start := time.Now()
+	discoveries := c.discoverReceivePeers()
+
+	assert.Empty(t, discoveries)
+	assert.Less(t, time.Since(start), 500*time.Millisecond)
+	assert.Equal(t, len(receiveStatusLookingForSender), c.receiveStatusWidth)
+	c.clearReceiveStatus()
+}
+
+func TestHostileSymlinkThenSameNameFileOverwritesSymlinkTarget(t *testing.T) {
+	tmpDir := t.TempDir()
+	receiveDir := filepath.Join(tmpDir, "receive")
+	if err := os.MkdirAll(receiveDir, 0o755); err != nil {
+		t.Fatalf("mkdir receive dir: %v", err)
+	}
+	originalCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(receiveDir); err != nil {
+		t.Fatalf("chdir receive dir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(originalCwd); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	}()
+
+	outsideTarget := filepath.Join(tmpDir, "outside-target.txt")
+	original := []byte("original content that should remain\n")
+	if err := os.WriteFile(outsideTarget, original, 0o644); err != nil {
+		t.Fatalf("write outside target: %v", err)
+	}
+
+	attackerPayload := []byte("attacker-controlled\n")
+	senderInfo := SenderInfo{
+		FilesToTransfer: []FileInfo{
+			{
+				Name:         "dup",
+				FolderRemote: ".",
+				Size:         0,
+				Symlink:      outsideTarget,
+			},
+			{
+				Name:         "dup",
+				FolderRemote: ".",
+				Size:         int64(len(attackerPayload)),
+				Mode:         0o644,
+			},
+		},
+		SendingText: true,
+	}
+	payload, err := json.Marshal(senderInfo)
+	assert.NoError(t, err)
+
+	client := &Client{
+		Options: Options{
+			NoPrompt:    true,
+			SendingText: true,
+		},
+		FilesHasFinished: make(map[int]struct{}),
+	}
+
+	done, err := client.processMessageFileInfo(message.Message{
+		Type:  message.TypeFileInfo,
+		Bytes: payload,
+	})
+	assert.True(t, done)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "symlink target")
+
+	got, err := os.ReadFile(outsideTarget)
+	assert.NoError(t, err)
+	assert.Equal(t, original, got)
+
+	_, err = os.Lstat(filepath.Join(receiveDir, "dup"))
+	assert.True(t, os.IsNotExist(err), "hostile metadata should be rejected before creating dup")
+}
+
+func TestHostileEmptyFolderTraversalCreatesOutsideCwd(t *testing.T) {
+	tmpDir := t.TempDir()
+	receiveDir := filepath.Join(tmpDir, "receive")
+	if err := os.MkdirAll(receiveDir, 0o755); err != nil {
+		t.Fatalf("mkdir receive dir: %v", err)
+	}
+
+	originalCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(receiveDir); err != nil {
+		t.Fatalf("chdir receive dir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(originalCwd); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	}()
+
+	outsideFolder := filepath.Join(tmpDir, "outside-empty-folder")
+	hostileFolder := filepath.Join("..", filepath.Base(outsideFolder))
+	senderInfo := SenderInfo{
+		FilesToTransfer: []FileInfo{
+			{
+				Name:         "benign.txt",
+				FolderRemote: ".",
+				Size:         1,
+			},
+		},
+		EmptyFoldersToTransfer: []FileInfo{
+			{
+				FolderRemote: hostileFolder,
+			},
+		},
+		TotalNumberFolders: 1,
+		SendingText:        true,
+	}
+	payload, err := json.Marshal(senderInfo)
+	assert.NoError(t, err)
+
+	client := &Client{
+		Options: Options{
+			NoPrompt:    true,
+			SendingText: true,
+		},
+		FilesHasFinished: make(map[int]struct{}),
+	}
+
+	done, err := client.processMessageFileInfo(message.Message{
+		Type:  message.TypeFileInfo,
+		Bytes: payload,
+	})
+	assert.True(t, done)
+	assert.Error(t, err)
+
+	_, err = os.Stat(outsideFolder)
+	assert.True(t, os.IsNotExist(err), "empty folder metadata should be rejected before creating directories outside the receive directory")
+}
+
+func TestHostileRegularFileTraversalRejected(t *testing.T) {
+	senderInfo := SenderInfo{
+		FilesToTransfer: []FileInfo{
+			{
+				Name:         "x.txt",
+				FolderRemote: filepath.Join("..", "escaped-file"),
+				Size:         1,
+			},
+		},
+	}
+	payload, err := json.Marshal(senderInfo)
+	assert.NoError(t, err)
+
+	client := &Client{
+		Options: Options{
+			NoPrompt:    true,
+			SendingText: true,
+		},
+		FilesHasFinished: make(map[int]struct{}),
+	}
+
+	done, err := client.processMessageFileInfo(message.Message{
+		Type:  message.TypeFileInfo,
+		Bytes: payload,
+	})
+	assert.True(t, done)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "filename must be a local path")
+}
+
+func TestHostileDuplicateDestinationRejected(t *testing.T) {
+	senderInfo := SenderInfo{
+		FilesToTransfer: []FileInfo{
+			{
+				Name:         "dup",
+				FolderRemote: ".",
+				Size:         1,
+			},
+			{
+				Name:         "dup",
+				FolderRemote: "./",
+				Size:         2,
+			},
+		},
+		SendingText: true,
+	}
+	payload, err := json.Marshal(senderInfo)
+	assert.NoError(t, err)
+
+	client := &Client{
+		Options: Options{
+			NoPrompt:    true,
+			SendingText: true,
+		},
+		FilesHasFinished: make(map[int]struct{}),
+	}
+
+	done, err := client.processMessageFileInfo(message.Message{
+		Type:  message.TypeFileInfo,
+		Bytes: payload,
+	})
+	assert.True(t, done)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate destination path")
+}
+
+func TestHostilePortableDestinationNamesRejected(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []FileInfo
+	}{
+		{name: "absolute", files: []FileInfo{{Name: "file.txt", FolderRemote: "/absolute"}}},
+		{name: "drive absolute", files: []FileInfo{{Name: "file.txt", FolderRemote: `C:\absolute`}}},
+		{name: "control", files: []FileInfo{{Name: "escape\x1b.txt", FolderRemote: "."}}},
+		{name: "device", files: []FileInfo{{Name: "CON.txt", FolderRemote: "."}}},
+		{name: "alternate data stream", files: []FileInfo{{Name: "file.txt:stream", FolderRemote: "."}}},
+		{name: "git hook", files: []FileInfo{{Name: "post-checkout", FolderRemote: ".git/hooks"}}},
+		{name: "case folded ssh", files: []FileInfo{{Name: "authorized_keys", FolderRemote: ".SSH"}}},
+		{name: "sensitive symlink target", files: []FileInfo{{Name: "link", FolderRemote: ".", Symlink: ".git/config"}}},
+		{name: "case fold collision", files: []FileInfo{
+			{Name: "README", FolderRemote: "."},
+			{Name: "readme", FolderRemote: "."},
+		}},
+		{name: "normalization collision", files: []FileInfo{
+			{Name: "é.txt", FolderRemote: "."},
+			{Name: "e\u0301.txt", FolderRemote: "."},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, _, err := validateReceiveMetadata(tt.files, nil); err == nil {
+				t.Fatal("hostile metadata was accepted")
+			}
+		})
+	}
+}
+
+func TestMarkedArchiveRequiresCompleteValidationBeforeExtraction(t *testing.T) {
+	receiveDirectory := t.TempDir()
+	t.Chdir(receiveDirectory)
+	archivePath := filepath.Join(receiveDirectory, "candidate.zip")
+	writeTestZip(t, archivePath, map[string]string{
+		"safe.txt":       "safe",
+		"../escaped.txt": "escape",
+	})
+	client := &Client{FilesToTransfer: []FileInfo{{
+		Name: "candidate.zip", FolderRemote: ".", TempFile: true,
+	}}}
+	defer client.closeReceiveFilesystem()
+
+	err := client.extractReceivedArchives()
+	if err == nil || err.Error() != "received archive failed validation or extraction" {
+		t.Fatalf("extraction error = %v", err)
+	}
+	if _, statErr := os.Stat(archivePath); statErr != nil {
+		t.Fatalf("rejected archive was not retained: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(receiveDirectory, "safe.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("archive was partially extracted: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(filepath.Dir(receiveDirectory), "escaped.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("archive escaped the receive root: %v", statErr)
+	}
+}
+
+func TestMarkedArchiveCancellationRetainsArchive(t *testing.T) {
+	receiveDirectory := t.TempDir()
+	t.Chdir(receiveDirectory)
+	archivePath := filepath.Join(receiveDirectory, "candidate.zip")
+	writeTestZip(t, archivePath, map[string]string{"payload.txt": "payload"})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client := &Client{
+		FilesToTransfer: []FileInfo{{Name: "candidate.zip", FolderRemote: ".", TempFile: true}},
+		stop:            newStop(ctx),
+	}
+	defer client.closeReceiveFilesystem()
+
+	err := client.extractReceivedArchives()
+	assert.ErrorIs(t, err, context.Canceled)
+	if _, statErr := os.Stat(archivePath); statErr != nil {
+		t.Fatalf("canceled extraction did not retain its archive: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(receiveDirectory, "payload.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("canceled extraction committed output: %v", statErr)
+	}
+}
+
+func TestMarkedArchiveRejectsSensitivePathBeforeExtraction(t *testing.T) {
+	receiveDirectory := t.TempDir()
+	t.Chdir(receiveDirectory)
+	archivePath := filepath.Join(receiveDirectory, "candidate.zip")
+	writeTestZip(t, archivePath, map[string]string{
+		".ssh/authorized_keys": "attacker-key",
+	})
+	if err := os.Mkdir(".ssh", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	client := &Client{FilesToTransfer: []FileInfo{{
+		Name: "candidate.zip", FolderRemote: ".", TempFile: true,
+	}}}
+	defer client.closeReceiveFilesystem()
+
+	err := client.extractReceivedArchives()
+	if err == nil || err.Error() != "received archive failed validation or extraction" {
+		t.Fatalf("extraction error = %v", err)
+	}
+	if _, statErr := os.Stat(archivePath); statErr != nil {
+		t.Fatalf("rejected archive was not retained: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(receiveDirectory, ".ssh", "authorized_keys")); !os.IsNotExist(statErr) {
+		t.Fatalf("sensitive archive member was created: %v", statErr)
+	}
+}
+
+func TestMarkedValidatedArchiveExtractsThenCleansUp(t *testing.T) {
+	receiveDirectory := t.TempDir()
+	t.Chdir(receiveDirectory)
+	archivePath := filepath.Join(receiveDirectory, "candidate.zip")
+	writeTestZip(t, archivePath, map[string]string{"folder/payload.txt": "payload"})
+	client := &Client{FilesToTransfer: []FileInfo{{
+		Name: "candidate.zip", FolderRemote: ".", TempFile: true,
+	}}}
+	defer client.closeReceiveFilesystem()
+
+	if err := client.extractReceivedArchives(); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadFile(filepath.Join(receiveDirectory, "folder", "payload.txt"))
+	if err != nil || string(contents) != "payload" {
+		t.Fatalf("extracted contents = %q, %v", contents, err)
+	}
+	if _, err = os.Stat(archivePath); !os.IsNotExist(err) {
+		t.Fatalf("validated archive was not removed: %v", err)
+	}
+}
+
+func TestUnmarkedArchiveRemainsAnOrdinaryFile(t *testing.T) {
+	receiveDirectory := t.TempDir()
+	t.Chdir(receiveDirectory)
+	archivePath := filepath.Join(receiveDirectory, "ordinary.zip")
+	writeTestZip(t, archivePath, map[string]string{"payload.txt": "payload"})
+	client := &Client{FilesToTransfer: []FileInfo{{
+		Name: "ordinary.zip", FolderRemote: ".", TempFile: false,
+	}}}
+	defer client.closeReceiveFilesystem()
+
+	if err := client.extractReceivedArchives(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(archivePath); err != nil {
+		t.Fatalf("ordinary archive was removed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(receiveDirectory, "payload.txt")); !os.IsNotExist(err) {
+		t.Fatalf("ordinary archive was extracted: %v", err)
+	}
+}
+
+func writeTestZip(t *testing.T, name string, entries map[string]string) {
+	t.Helper()
+	file, err := os.Create(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := zip.NewWriter(file)
+	for entryName, contents := range entries {
+		entry, createErr := writer.CreateHeader(&zip.FileHeader{Name: entryName, Method: zip.Store})
+		if createErr != nil {
+			t.Fatal(createErr)
+		}
+		if _, writeErr := entry.Write([]byte(contents)); writeErr != nil {
+			t.Fatal(writeErr)
+		}
+	}
+	if err = writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err = file.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHostileExistingSymlinkDestinationRejected(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on some Windows setups")
+	}
+
+	tmpDir := t.TempDir()
+	receiveDir := filepath.Join(tmpDir, "receive")
+	if err := os.MkdirAll(receiveDir, 0o755); err != nil {
+		t.Fatalf("mkdir receive dir: %v", err)
+	}
+
+	originalCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(receiveDir); err != nil {
+		t.Fatalf("chdir receive dir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(originalCwd); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	}()
+
+	outsideTarget := filepath.Join(tmpDir, "outside-target.txt")
+	original := []byte("original content that should remain\n")
+	if err := os.WriteFile(outsideTarget, original, 0o644); err != nil {
+		t.Fatalf("write outside target: %v", err)
+	}
+	if err := os.Symlink(outsideTarget, "dup"); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	client := &Client{
+		Options: Options{
+			SendingText: true,
+			Overwrite:   true,
+		},
+		FilesHasFinished: make(map[int]struct{}),
+		FilesToTransfer: []FileInfo{
+			{
+				Name:         "dup",
+				FolderRemote: ".",
+				Size:         1,
+				Mode:         0o644,
+			},
+		},
+	}
+
+	err = client.recipientInitializeFile()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "refusing to open symlink destination")
+
+	got, err := os.ReadFile(outsideTarget)
+	assert.NoError(t, err)
+	assert.Equal(t, original, got)
+}
+
+func TestHostileExistingSymlinkParentRejected(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated privileges on some Windows setups")
+	}
+
+	tmpDir := t.TempDir()
+	receiveDir := filepath.Join(tmpDir, "receive")
+	outsideDir := filepath.Join(tmpDir, "outside")
+	if err := os.MkdirAll(receiveDir, 0o755); err != nil {
+		t.Fatalf("mkdir receive dir: %v", err)
+	}
+	if err := os.MkdirAll(outsideDir, 0o755); err != nil {
+		t.Fatalf("mkdir outside dir: %v", err)
+	}
+	if err := os.Symlink(outsideDir, filepath.Join(receiveDir, "nested")); err != nil {
+		t.Fatalf("create symlink parent: %v", err)
+	}
+
+	originalCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(receiveDir); err != nil {
+		t.Fatalf("chdir receive dir: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(originalCwd); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	}()
+
+	client := &Client{
+		Options: Options{
+			SendingText: true,
+			Overwrite:   true,
+		},
+		FilesHasFinished: make(map[int]struct{}),
+		FilesToTransfer: []FileInfo{
+			{
+				Name:         "payload.txt",
+				FolderRemote: "nested",
+				Size:         1,
+				Mode:         0o644,
+			},
+		},
+	}
+
+	err = client.recipientInitializeFile()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "symlink destination path component")
+
+	_, err = os.Stat(filepath.Join(outsideDir, "payload.txt"))
+	assert.True(t, os.IsNotExist(err), "receive must not write through a symlink parent")
+}
+
+func TestCrocReadme(t *testing.T) {
+	relay := startTestRelay(t, 4)
+	defer os.Remove("README.md")
+	const secret = "acid-acorn-acre"
+
+	log.Debug("setting up sender")
+	sender, err := newTestClient(Options{
+		IsSender:      true,
+		SharedSecret:  secret,
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPorts:    append([]string(nil), relay.allPorts...),
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+		GitIgnore:     false,
+		Transport:     TransportDERP,
+	})
+	if err != nil {
+		panic(err)
+	}
+	if sender.Options.Transport != TransportRelay {
+		t.Fatalf("unavailable strict transport = %q; want relay", sender.Options.Transport)
+	}
+
+	log.Debug("setting up receiver")
+	receiver, err := newTestClient(Options{
+		IsSender:      false,
+		SharedSecret:  secret,
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{"../../README.md"}, false, false, []string{})
+		if errGet != nil {
+			t.Errorf("failed to get minimal info: %v", errGet)
+		}
+		err := sender.Send(filesInfo, emptyFolders, totalNumberFolders)
+		if err != nil {
+			t.Errorf("send failed: %v", err)
+		}
+		wg.Done()
+	}()
+	time.Sleep(100 * time.Millisecond)
+	go func() {
+		err := receiver.Receive()
+		if err != nil {
+			t.Errorf("receive failed: %v", err)
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
+	want, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatalf("read source README: %v", err)
+	}
+	got, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read received README: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatal("relay-only transfer output differs from source")
+	}
+}
+
+func TestCrocNonASCIIFileName(t *testing.T) {
+	relay := startTestRelay(t, 4)
+	testDir := t.TempDir()
+	sourceDir := filepath.Join(testDir, "source")
+	receiveDir := filepath.Join(testDir, "receive")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatalf("create source directory: %v", err)
+	}
+	if err := os.MkdirAll(receiveDir, 0o755); err != nil {
+		t.Fatalf("create receive directory: %v", err)
+	}
+
+	// The 20-byte progress-label truncation boundary falls in the middle of ä.
+	const fileName = "1234567890123456789ä.txt"
+	want := bytes.Repeat([]byte("x"), 10_000_001)
+	sourcePath := filepath.Join(sourceDir, fileName)
+	if err := os.WriteFile(sourcePath, want, 0o644); err != nil {
+		t.Fatalf("write source file: %v", err)
+	}
+	stderr, err := os.CreateTemp(testDir, "transfer-stderr-")
+	if err != nil {
+		t.Fatalf("create stderr capture: %v", err)
+	}
+	originalStderr := os.Stderr
+	os.Stderr = stderr
+	t.Cleanup(func() {
+		os.Stderr = originalStderr
+		if err := stderr.Close(); err != nil {
+			t.Errorf("close stderr capture: %v", err)
+		}
+	})
+
+	filesInfo, emptyFolders, totalNumberFolders, err := GetFilesInfo([]string{sourcePath}, false, false, nil)
+	if err != nil {
+		t.Fatalf("get source file info: %v", err)
+	}
+
+	originalCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	if err := os.Chdir(receiveDir); err != nil {
+		t.Fatalf("change to receive directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(originalCwd); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
+
+	secret := fmt.Sprintf("non-ascii-filename-%d", time.Now().UnixNano())
+	sender, err := newTestClient(Options{
+		IsSender:      true,
+		SharedSecret:  secret,
+		RelayAddress:  relay.address,
+		RelayPorts:    append([]string(nil), relay.allPorts...),
+		RelayPassword: "pass123",
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+		GitIgnore:     false,
+	})
+	if err != nil {
+		t.Fatalf("create sender: %v", err)
+	}
+	receiver, err := newTestClient(Options{
+		IsSender:      false,
+		SharedSecret:  secret,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		t.Fatalf("create receiver: %v", err)
+	}
+
+	errCh := make(chan error, 2)
+	go func() {
+		errCh <- sender.Send(filesInfo, emptyFolders, totalNumberFolders)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	go func() {
+		errCh <- receiver.Receive()
+	}()
+	for range 2 {
+		if err := <-errCh; err != nil {
+			t.Errorf("transfer failed: %v", err)
+		}
+	}
+
+	receivedPath := filepath.Join(receiveDir, fileName)
+	got, err := os.ReadFile(receivedPath)
+	if err != nil {
+		t.Fatalf("read received file %q: %v", fileName, err)
+	}
+	if !bytes.Equal(want, got) {
+		t.Errorf("received payload does not match source")
+	}
+
+	if err := stderr.Sync(); err != nil {
+		t.Fatalf("sync stderr capture: %v", err)
+	}
+	output, err := os.ReadFile(stderr.Name())
+	if err != nil {
+		t.Fatalf("read stderr capture: %v", err)
+	}
+	statusOffset := 0
+	for _, status := range []string{
+		receiveStatusConnecting,
+		receiveStatusWaitingForSender,
+		receiveStatusAuthenticatingCode,
+		receiveStatusOpeningTransferChannels,
+		receiveStatusWaitingForFileList,
+	} {
+		relative := bytes.Index(output[statusOffset:], []byte(status))
+		if relative < 0 {
+			t.Fatalf("receive output does not contain status %q after byte %d: %q", status, statusOffset, output)
+		}
+		statusOffset += relative + len(status)
+	}
+	if bytes.Contains(output, []byte(receiveStatusLookingForSender)) {
+		t.Fatalf("receive output contains local-discovery status while discovery is disabled: %q", output)
+	}
+	for offset := 0; offset < len(output); {
+		_, size := utf8.DecodeRune(output[offset:])
+		if size == 1 && output[offset] >= utf8.RuneSelf {
+			end := min(offset+8, len(output))
+			t.Errorf("transfer output is not valid UTF-8 at byte %d near %x", offset, output[offset:end])
+			break
+		}
+		offset += size
+	}
+}
+
+func TestCrocRenameExistingFile(t *testing.T) {
+	relay := startTestRelay(t, 4)
+	testDir := t.TempDir()
+	sourceDir := filepath.Join(testDir, "source")
+	receiveDir := filepath.Join(testDir, "receive")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatalf("create source directory: %v", err)
+	}
+	if err := os.MkdirAll(receiveDir, 0o755); err != nil {
+		t.Fatalf("create receive directory: %v", err)
+	}
+
+	const fileName = "video.mkv"
+	want := bytes.Repeat([]byte("new"), 1000)
+	existing := []byte("existing content")
+	sourcePath := filepath.Join(sourceDir, fileName)
+	if err := os.WriteFile(sourcePath, want, 0o644); err != nil {
+		t.Fatalf("write source file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(receiveDir, fileName), existing, 0o644); err != nil {
+		t.Fatalf("write existing file: %v", err)
+	}
+
+	filesInfo, emptyFolders, totalNumberFolders, err := GetFilesInfo([]string{sourcePath}, false, false, nil)
+	if err != nil {
+		t.Fatalf("get source file info: %v", err)
+	}
+
+	originalCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	if err := os.Chdir(receiveDir); err != nil {
+		t.Fatalf("change to receive directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(originalCwd); err != nil {
+			t.Errorf("restore working directory: %v", err)
+		}
+	})
+
+	secret := fmt.Sprintf("rename-existing-%d", time.Now().UnixNano())
+	sender, err := newTestClient(Options{
+		IsSender:      true,
+		SharedSecret:  secret,
+		RelayAddress:  relay.address,
+		RelayPorts:    append([]string(nil), relay.allPorts...),
+		RelayPassword: "pass123",
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		GitIgnore:     false,
+	})
+	if err != nil {
+		t.Fatalf("create sender: %v", err)
+	}
+	receiver, err := newTestClient(Options{
+		IsSender:      false,
+		SharedSecret:  secret,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Rename:        true,
+	})
+	if err != nil {
+		t.Fatalf("create receiver: %v", err)
+	}
+
+	errCh := make(chan error, 2)
+	go func() {
+		errCh <- sender.Send(filesInfo, emptyFolders, totalNumberFolders)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	go func() {
+		errCh <- receiver.Receive()
+	}()
+	for range 2 {
+		if err := <-errCh; err != nil {
+			t.Errorf("transfer failed: %v", err)
+		}
+	}
+
+	got, err := os.ReadFile(filepath.Join(receiveDir, "video (1).mkv"))
+	if err != nil {
+		t.Fatalf("read renamed file: %v", err)
+	}
+	if !bytes.Equal(want, got) {
+		t.Errorf("renamed file payload does not match source")
+	}
+	kept, err := os.ReadFile(filepath.Join(receiveDir, fileName))
+	if err != nil {
+		t.Fatalf("read original file: %v", err)
+	}
+	if !bytes.Equal(existing, kept) {
+		t.Errorf("original file was modified")
+	}
+}
+
+func TestCrocEmptyFolder(t *testing.T) {
+	relay := startTestRelay(t, 4)
+	pathName := "../../testEmpty"
+	defer os.RemoveAll(pathName)
+	defer os.RemoveAll("./testEmpty")
+	os.MkdirAll(pathName, 0o755)
+
+	log.Debug("setting up sender")
+	sender, err := newTestClient(Options{
+		IsSender:      true,
+		SharedSecret:  "8123-testingthecroc",
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPorts:    append([]string(nil), relay.allPorts...),
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	log.Debug("setting up receiver")
+	receiver, err := newTestClient(Options{
+		IsSender:      false,
+		SharedSecret:  "8123-testingthecroc",
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{pathName}, false, false, []string{})
+		if errGet != nil {
+			t.Errorf("failed to get minimal info: %v", errGet)
+		}
+		err := sender.Send(filesInfo, emptyFolders, totalNumberFolders)
+		if err != nil {
+			t.Errorf("send failed: %v", err)
+		}
+		wg.Done()
+	}()
+	time.Sleep(100 * time.Millisecond)
+	go func() {
+		err := receiver.Receive()
+		if err != nil {
+			t.Errorf("receive failed: %v", err)
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
+}
+
+func TestCrocSymlink(t *testing.T) {
+	relay := startTestRelay(t, 4)
+	pathName := "../link-in-folder"
+	defer os.RemoveAll(pathName)
+	defer os.RemoveAll("./link-in-folder")
+	os.MkdirAll(pathName, 0o755)
+	if err := os.WriteFile(filepath.Join(pathName, "target.txt"), []byte("safe symlink target"), 0o644); err != nil {
+		t.Fatalf("write symlink target: %v", err)
+	}
+	if err := os.Symlink("target.txt", filepath.Join(pathName, "README.link")); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	log.Debug("setting up sender")
+	sender, err := newTestClient(Options{
+		IsSender:      true,
+		SharedSecret:  "8124-testingthecroc",
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPorts:    append([]string(nil), relay.allPorts...),
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+		GitIgnore:     false,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	log.Debug("setting up receiver")
+	receiver, err := newTestClient(Options{
+		IsSender:      false,
+		SharedSecret:  "8124-testingthecroc",
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	var senderErr, receiverErr error
+	go func() {
+		defer wg.Done()
+		filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{pathName}, false, false, []string{})
+		if errGet != nil {
+			senderErr = fmt.Errorf("failed to get minimal info: %w", errGet)
+			return
+		}
+		senderErr = sender.Send(filesInfo, emptyFolders, totalNumberFolders)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	go func() {
+		defer wg.Done()
+		receiverErr = receiver.Receive()
+	}()
+
+	wg.Wait()
+	if senderErr != nil {
+		t.Errorf("send failed: %v", senderErr)
+	}
+	if receiverErr != nil {
+		t.Errorf("receive failed: %v", receiverErr)
+	}
+
+	linkPath := filepath.Join("link-in-folder", "README.link")
+	s, err := os.Readlink(linkPath)
+	if s != "target.txt" {
+		t.Errorf("symlink target = %q, want target.txt", s)
+	}
+	if err != nil {
+		t.Errorf("symlink transfer failed: %s", err.Error())
+	}
+	resolvedLink, err := filepath.EvalSymlinks(linkPath)
+	if err != nil {
+		t.Errorf("symlink resolution failed: %s", err.Error())
+	}
+	resolvedTarget, err := filepath.EvalSymlinks(filepath.Join("link-in-folder", "target.txt"))
+	if err != nil {
+		t.Errorf("target resolution failed: %s", err.Error())
+	}
+	assert.Equal(t, resolvedTarget, resolvedLink)
+}
+func TestCrocIgnoreGit(t *testing.T) {
+	log.SetLevel("trace")
+	defer os.Remove(".gitignore")
+	time.Sleep(300 * time.Millisecond)
+
+	time.Sleep(1 * time.Second)
+	file, err := os.Create(".gitignore")
+	if err != nil {
+		log.Errorf("error creating file")
+	}
+	_, err = file.WriteString("LICENSE")
+	if err != nil {
+		log.Errorf("error writing to file")
+	}
+	time.Sleep(1 * time.Second)
+	// due to how files are ignored in this function, all we have to do to test is make sure LICENSE doesn't get included in FilesInfo.
+	filesInfo, _, _, errGet := GetFilesInfo([]string{"../../LICENSE", ".gitignore", "croc.go"}, false, true, []string{})
+	if errGet != nil {
+		t.Errorf("failed to get minimal info: %v", errGet)
+	}
+	for _, file := range filesInfo {
+		if strings.Contains(file.Name, "LICENSE") {
+			t.Errorf("test failed, should ignore LICENSE")
+		}
+	}
+}
+
+// TestGetFilesInfoZipFolderHonoursFilters covers the integration between
+// GetFilesInfo and ZipDirectory when zipfolder=true. Regression test for
+// https://github.com/schollz/croc/issues/1087: --exclude and --git were
+// silently ignored in zip mode because the args weren't passed through.
+func TestGetFilesInfoZipFolderHonoursFilters(t *testing.T) {
+	tmpDir := t.TempDir()
+	src := filepath.Join(tmpDir, "myproj")
+	for _, rel := range []string{
+		"main.go",
+		"node_modules/pkg.json",
+		".venv/file.py",
+		"build/output.bin",
+	} {
+		p := filepath.Join(src, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+	// gitWalk calls MatchesPath(info.Name()) on basenames, which doesn't
+	// match patterns with trailing slashes. Use a plain pattern.
+	gitignore := filepath.Join(src, ".gitignore")
+	if err := os.WriteFile(gitignore, []byte("build\n"), 0o644); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
+
+	// GetFilesInfo creates the zip in cwd, so chdir to a clean tmp location.
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	filesInfo, _, _, err := GetFilesInfo([]string{"myproj"}, true /*zipfolder*/, true /*ignoreGit*/, []string{"node_modules", ".venv"})
+	if err != nil {
+		t.Fatalf("GetFilesInfo: %v", err)
+	}
+	if len(filesInfo) != 1 {
+		t.Fatalf("expected 1 FileInfo (the zip), got %d", len(filesInfo))
+	}
+	zipName := filesInfo[0].Name
+	defer os.Remove(zipName)
+
+	archive, err := zip.OpenReader(zipName)
+	if err != nil {
+		t.Fatalf("open zip %s: %v", zipName, err)
+	}
+	defer archive.Close()
+
+	got := make([]string, 0, len(archive.File))
+	for _, f := range archive.File {
+		got = append(got, f.Name)
+	}
+	for _, name := range got {
+		if strings.Contains(name, "node_modules") || strings.Contains(name, ".venv") {
+			t.Errorf("--exclude leak: %q is in zip\n  members: %v", name, got)
+		}
+		if strings.Contains(name, "build") {
+			t.Errorf("--git leak: %q is in zip\n  members: %v", name, got)
+		}
+	}
+	wantKept := "myproj/main.go"
+	found := slices.Contains(got, wantKept)
+	if !found {
+		t.Errorf("expected %q in zip; got %v", wantKept, got)
+	}
+}
+
+func TestGetFilesInfoExactFileExclusion(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "root")
+	for _, rel := range []string{"a/image.jpg", "b/a/image.jpg", "photo.png"} {
+		file := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(file, []byte(rel), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	files, _, _, err := GetFilesInfoWithExactExclusions([]string{root}, false, false, nil, []string{"a/image.jpg"})
+	if err != nil {
+		t.Fatalf("GetFilesInfoWithExactExclusions: %v", err)
+	}
+	got := make(map[string]bool)
+	for _, file := range files {
+		rel, err := filepath.Rel(root, filepath.Join(file.FolderSource, file.Name))
+		if err != nil {
+			t.Fatalf("relative path: %v", err)
+		}
+		got[filepath.ToSlash(rel)] = true
+	}
+	if got["a/image.jpg"] {
+		t.Fatal("exactly excluded file was returned")
+	}
+	for _, want := range []string{"b/a/image.jpg", "photo.png"} {
+		if !got[want] {
+			t.Errorf("expected %q to be returned; got %v", want, got)
+		}
+	}
+}
+
+func TestGetFilesInfoContextReturnsCanceledBeforeWalking(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	started := time.Now()
+	_, _, _, err := GetFilesInfoContext(ctx, []string{t.TempDir()}, false, false, nil)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Less(t, time.Since(started), 500*time.Millisecond)
+}
+
+func TestNewCtxCancellationClosesBlockedControlConnection(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	client, err := NewCtx(ctx, Options{IsSender: true, SharedSecret: "cancel-blocked-control", Curve: "p256"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, peer := net.Pipe()
+	defer peer.Close()
+	client.setConnection(0, comm.New(local))
+	result := make(chan error, 1)
+	go func() { result <- client.transfer() }()
+	time.Sleep(10 * time.Millisecond)
+	started := time.Now()
+	cancel()
+	select {
+	case err = <-result:
+		assert.ErrorIs(t, err, context.Canceled)
+		assert.Less(t, time.Since(started), 500*time.Millisecond)
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("blocked control receive did not stop after cancellation")
+	}
+}
+
+func TestReceiveCancellationClosesPendingRelayConnection(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	accepted := make(chan struct{})
+	closed := make(chan struct{})
+	go func() {
+		connection, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		close(accepted)
+		_, _ = io.Copy(io.Discard, connection)
+		_ = connection.Close()
+		close(closed)
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	client, err := NewCtx(ctx, Options{
+		SharedSecret:  "cancel-pending-receive",
+		RelayAddress:  listener.Addr().String(),
+		RelayPassword: "pass",
+		DisableLocal:  true,
+		Curve:         "p256",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() { result <- client.Receive() }()
+	select {
+	case <-accepted:
+	case <-time.After(time.Second):
+		t.Fatal("receiver did not open its relay connection")
+	}
+	started := time.Now()
+	cancel()
+	select {
+	case err = <-result:
+		assert.ErrorIs(t, err, context.Canceled)
+		assert.Less(t, time.Since(started), 500*time.Millisecond)
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("receiver did not stop after cancellation")
+	}
+	select {
+	case <-closed:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("receiver cancellation did not close the relay connection")
+	}
+}
+
+// TestIsChild guards the gitignore walk helper. A directory or file whose
+// base name merely starts with ".." (e.g. "..cache") is still a legitimate
+// child of its parent and must be reported as such, otherwise it escapes the
+// inherited ignore rules in gitWalk and leaks into --git transfers.
+func TestIsChild(t *testing.T) {
+	sep := string(os.PathSeparator)
+	base := filepath.Join(sep+"a", "b")
+	// genuine descendants
+	assert.True(t, isChild(base, filepath.Join(base, "c")))
+	assert.True(t, isChild(base, filepath.Join(base, "c", "d")))
+	// a child whose name starts with ".." is still a child (regression)
+	assert.True(t, isChild(base, filepath.Join(base, "..cache")))
+	// the path itself is treated as a child
+	assert.True(t, isChild(base, base))
+	// siblings and ancestors are not children
+	assert.False(t, isChild(base, filepath.Join(sep+"a", "bc")))
+	assert.False(t, isChild(base, sep+"a"))
+}
+
+func TestGetFilesInfoZipFolderFromInsideSourceExcludesArchiveItself(t *testing.T) {
+	tmpDir := t.TempDir()
+	src := filepath.Join(tmpDir, "payload")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "file.txt"), []byte("contents"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(src); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(origDir) }()
+
+	done := make(chan []FileInfo, 1)
+	errc := make(chan error, 1)
+	go func() {
+		filesInfo, _, _, err := GetFilesInfo([]string{src}, true, false, nil)
+		if err != nil {
+			errc <- err
+			return
+		}
+		done <- filesInfo
+	}()
+
+	var filesInfo []FileInfo
+	select {
+	case filesInfo = <-done:
+	case err := <-errc:
+		t.Fatalf("GetFilesInfo: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("GetFilesInfo did not return when zipping a directory from inside itself")
+	}
+	if len(filesInfo) != 1 {
+		t.Fatalf("expected 1 FileInfo (the zip), got %d", len(filesInfo))
+	}
+
+	archive, err := zip.OpenReader(filesInfo[0].Name)
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+	defer archive.Close()
+
+	members := make([]string, 0, len(archive.File))
+	foundPayload := false
+	for _, f := range archive.File {
+		members = append(members, f.Name)
+		if f.Name == "payload/payload.zip" {
+			t.Fatalf("archive includes itself: %v", members)
+		}
+		if f.Name == "payload/file.txt" {
+			foundPayload = true
+		}
+	}
+	if !foundPayload {
+		t.Fatalf("archive is missing payload file: %v", members)
+	}
+}
+
+func TestCrocLocal(t *testing.T) {
+	log.SetLevel("trace")
+	defer os.Remove("LICENSE")
+	defer os.Remove("touched")
+	localPorts := freeConsecutiveTestPorts(t, 2)
+	localAddress := net.JoinHostPort("127.0.0.1", localPorts[0])
+
+	log.Debug("setting up sender")
+	sender, err := newTestClient(Options{
+		IsSender:      true,
+		SharedSecret:  "8123-testingthecroc",
+		Debug:         true,
+		RelayAddress:  localAddress,
+		RelayPorts:    append([]string(nil), localPorts...),
+		RelayPassword: "pass123",
+		Stdout:        true,
+		NoPrompt:      true,
+		DisableLocal:  false,
+		OnlyLocal:     true,
+		Curve:         "ed25519",
+		Overwrite:     true,
+		GitIgnore:     false,
+	})
+	if err != nil {
+		panic(err)
+	}
+	log.Debug("setting up receiver")
+	receiver, err := newTestClient(Options{
+		IsSender:      false,
+		SharedSecret:  "8123-testingthecroc",
+		Debug:         true,
+		RelayAddress:  localAddress,
+		IP:            localAddress,
+		RelayPassword: "pass123",
+		Stdout:        true,
+		NoPrompt:      true,
+		DisableLocal:  false,
+		Curve:         "ed25519",
+		Overwrite:     true,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	touched, err := os.Create("touched")
+	if err != nil {
+		t.Fatalf("create touched file: %v", err)
+	}
+	if err := touched.Close(); err != nil {
+		t.Fatalf("close touched file: %v", err)
+	}
+	results := make(chan error, 2)
+	go func() {
+		filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{"../../LICENSE", "touched"}, false, false, []string{})
+		if errGet != nil {
+			results <- fmt.Errorf("get file info: %w", errGet)
+			return
+		}
+		results <- sender.Send(filesInfo, emptyFolders, totalNumberFolders)
+	}()
+	waitForRelayPorts(t, localPorts)
+	go func() {
+		results <- receiver.Receive()
+	}()
+
+	waitForTransferResults(t, results, 2, 20*time.Second, sender, receiver)
+}
+
+func TestSenderAndReceiverPreferLocalRelayOverExternalRelay(t *testing.T) {
+	log.SetLevel("warn")
+	externalRelay := startTestRelay(t, 4)
+
+	tempFile, cleanup := createTestFile(t, 64)
+	defer cleanup()
+	receivedFile := filepath.Base(tempFile)
+	defer os.Remove(receivedFile)
+
+	secret := fmt.Sprintf("localrelay-%d", time.Now().UnixNano())
+	sender, err := newTestClient(Options{
+		IsSender:      true,
+		SharedSecret:  secret,
+		Debug:         true,
+		RelayAddress:  externalRelay.address,
+		RelayPorts:    append([]string(nil), externalRelay.allPorts...),
+		RelayPassword: "pass123",
+		NoPrompt:      true,
+		DisableLocal:  false,
+		Curve:         "siec",
+		Overwrite:     true,
+		GitIgnore:     false,
+		NoCompress:    true,
+	})
+	if err != nil {
+		t.Fatalf("create sender: %v", err)
+	}
+	sender.localIPLookup = func() ([]string, error) {
+		return []string{"127.0.0.1"}, nil
+	}
+	filesInfo, emptyFolders, totalNumberFolders, err := GetFilesInfo([]string{tempFile}, false, false, []string{})
+	if err != nil {
+		t.Fatalf("GetFilesInfo: %v", err)
+	}
+	receiver, err := newTestClient(Options{
+		IsSender:      false,
+		SharedSecret:  secret,
+		Debug:         true,
+		RelayAddress:  externalRelay.address,
+		RelayPassword: "pass123",
+		NoPrompt:      true,
+		DisableLocal:  false,
+		TestFlag:      true,
+		Curve:         "siec",
+		Overwrite:     true,
+		NoCompress:    true,
+	})
+	if err != nil {
+		t.Fatalf("create receiver: %v", err)
+	}
+
+	errc := make(chan error, 2)
+	go func() {
+		errc <- sender.Send(filesInfo, emptyFolders, totalNumberFolders)
+	}()
+	go func() {
+		errc <- receiver.Receive()
+	}()
+
+	waitForTransferResults(t, errc, 2, 20*time.Second, sender, receiver)
+
+	localControlAddress := net.JoinHostPort("127.0.0.1", sender.localRelayPort)
+	senderAddress, _ := sender.currentRelayControlRoute()
+	receiverAddress, _ := receiver.currentRelayControlRoute()
+	assert.Equal(t, localControlAddress, senderAddress)
+	_, receiverPort, err := net.SplitHostPort(receiverAddress)
+	assert.NoError(t, err)
+	assert.Equal(t, sender.localRelayPort, receiverPort)
+	assert.NotEqual(t, externalRelay.controlPort, receiverPort)
+}
+
+func TestSenderLocalProbeDoesNotCorruptExternalRoute(t *testing.T) {
+	log.SetLevel("warn")
+	const externalHost = "127.0.0.2"
+	probeListener, err := net.Listen("tcp", net.JoinHostPort(externalHost, "0"))
+	if err != nil {
+		t.Skipf("%s is not available: %v", externalHost, err)
+	}
+	probeListener.Close()
+
+	externalPorts := freeConsecutiveTestPortsForHost(t, externalHost, 9)
+	localPorts := freeConsecutiveTestPorts(t, 5)
+	ctx := t.Context()
+	go tcp.RunCtx(ctx, "warn", externalHost, externalPorts[0], "pass123", strings.Join(externalPorts[1:], ","))
+	for _, port := range externalPorts[1:] {
+		go tcp.RunCtx(ctx, "warn", externalHost, port, "pass123")
+	}
+	time.Sleep(250 * time.Millisecond)
+
+	tempFile, cleanup := createTestFile(t, 0)
+	defer cleanup()
+	receivedFile := filepath.Base(tempFile)
+	defer os.Remove(receivedFile)
+
+	secret := fmt.Sprintf("externalroute-%d", time.Now().UnixNano())
+	externalAddress := net.JoinHostPort(externalHost, externalPorts[0])
+	sender, err := newTestClient(Options{
+		IsSender:      true,
+		SharedSecret:  secret,
+		Debug:         true,
+		RelayAddress:  externalAddress,
+		RelayPorts:    localPorts,
+		RelayPassword: "pass123",
+		NoPrompt:      true,
+		DisableLocal:  false,
+		Curve:         "siec",
+		Overwrite:     true,
+		GitIgnore:     false,
+		NoCompress:    true,
+	})
+	if err != nil {
+		t.Fatalf("create sender: %v", err)
+	}
+	filesInfo, emptyFolders, totalNumberFolders, err := GetFilesInfo([]string{tempFile}, false, false, []string{})
+	if err != nil {
+		t.Fatalf("GetFilesInfo: %v", err)
+	}
+	receiver, err := newTestClient(Options{
+		IsSender:      false,
+		SharedSecret:  secret,
+		Debug:         true,
+		RelayAddress:  externalAddress,
+		RelayPassword: "pass123",
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+		NoCompress:    true,
+	})
+	if err != nil {
+		t.Fatalf("create receiver: %v", err)
+	}
+
+	errc := make(chan error, 2)
+	go func() {
+		errc <- sender.Send(filesInfo, emptyFolders, totalNumberFolders)
+	}()
+	if err := waitHashed(sender); err != nil {
+		cancelClients(sender)
+		<-errc
+		t.Fatal(err)
+	}
+	time.Sleep(800 * time.Millisecond)
+	go func() {
+		errc <- receiver.Receive()
+	}()
+
+	waitForTransferResults(t, errc, 2, 20*time.Second, sender, receiver)
+	assert.Equal(t, externalAddress, sender.Options.RelayAddress)
+	info, err := os.Stat(receivedFile)
+	if err != nil {
+		t.Fatalf("received file missing: %v", err)
+	}
+	assert.Equal(t, int64(0), info.Size())
+}
+
+func TestCrocError(t *testing.T) {
+	content := []byte("temporary file's content")
+	tmpfile, err := os.CreateTemp("", "example")
+	if err != nil {
+		panic(err)
+	}
+
+	defer os.Remove(tmpfile.Name()) // clean up
+
+	if _, err = tmpfile.Write(content); err != nil {
+		panic(err)
+	}
+	if err = tmpfile.Close(); err != nil {
+		panic(err)
+	}
+
+	Debug(false)
+	log.SetLevel("warn")
+	sender, _ := newTestClient(Options{
+		IsSender:      true,
+		SharedSecret:  "8123-testingthecroc2",
+		Debug:         true,
+		RelayAddress:  "doesntexistok.com:8381",
+		RelayPorts:    []string{"8381", "8382"},
+		RelayPassword: "pass123",
+		Stdout:        true,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{tmpfile.Name()}, false, false, []string{})
+	if errGet != nil {
+		t.Errorf("failed to get minimal info: %v", errGet)
+	}
+	err = sender.Send(filesInfo, emptyFolders, totalNumberFolders)
+	log.Debug(err)
+	assert.NotNil(t, err)
+}
+
+func TestReceiverStdoutWithInvalidSecret(t *testing.T) {
+	// Test for issue: panic when receiving with --stdout and invalid CROC_SECRET
+	// This should fail gracefully without panicking
+	log.SetLevel("warn")
+	unusedPort := freeTestPort(t)
+	receiver, err := newTestClient(Options{
+		IsSender:      false,
+		SharedSecret:  "invalid-secret-12345",
+		Debug:         true,
+		RelayAddress:  net.JoinHostPort("127.0.0.1", unusedPort),
+		RelayPassword: "pass123",
+		Stdout:        true, // This is the key flag that triggered the panic
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		t.Errorf("failed to create receiver: %v", err)
+		return
+	}
+
+	// This should fail but not panic
+	err = receiver.Receive()
+	// We expect an error since the secret is invalid and no sender is present
+	assert.NotNil(t, err)
+	log.Debugf("Expected error occurred: %v", err)
+}
+
+func TestCleanUp(t *testing.T) {
+	// windows allows files to be deleted only if they
+	// are not open by another program so the remove actions
+	// from the above tests will not always do a good clean up
+	// This "test" will make sure
+	operatingSystem := runtime.GOOS
+	log.Debugf("The operating system is %s", operatingSystem)
+	if operatingSystem == "windows" {
+		time.Sleep(1 * time.Second)
+		log.Debug("Full cleanup")
+		var err error
+
+		for _, file := range []string{"README.md", "./README.md"} {
+			err = os.Remove(file)
+			if err == nil {
+				log.Debugf("Successfully purged %s", file)
+			} else {
+				log.Debugf("%s was already purged.", file)
+			}
+		}
+		for _, folder := range []string{"./testEmpty", "./link-in-folder"} {
+			err = os.RemoveAll(folder)
+			if err == nil {
+				log.Debugf("Successfully purged %s", folder)
+			} else {
+				log.Debugf("%s was already purged.", folder)
+			}
+		}
+	}
+}
+
+func waitHashed(sender *Client) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return sender.waitForFilesReady(ctx)
+}
+
+func transferSetupComplete(sender, receiver *Client) bool {
+	senderState := sender.lifecycleSnapshot()
+	receiverState := receiver.lifecycleSnapshot()
+	if !senderState.ChannelSecured || !receiverState.ChannelSecured {
+		return false
+	}
+	if senderState.FileInfoTransferred && receiverState.FileInfoTransferred {
+		log.Warn("Step2FileInfoTransferred reached")
+		return true
+	}
+	log.Warn("Step1ChannelSecured reached")
+	return false
+}
+
+func createTestFile(t *testing.T, size int) (string, func()) {
+	tempFile, err := os.CreateTemp("", "test-*.dat")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data := make([]byte, size)
+	for i := range size {
+		data[i] = byte(i % 256)
+	}
+
+	if _, err := tempFile.Write(data); err != nil {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
+		t.Fatal(err)
+	}
+
+	if err := tempFile.Close(); err != nil {
+		os.Remove(tempFile.Name())
+		t.Fatal(err)
+	}
+
+	return tempFile.Name(), func() {
+		os.Remove(tempFile.Name())
+	}
+}
+
+func freeTestPort(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for free port: %v", err)
+	}
+	defer listener.Close()
+	return strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
+}
+
+func freeConsecutiveTestPorts(t *testing.T, count int) []string {
+	t.Helper()
+	return freeConsecutiveTestPortsForHost(t, "127.0.0.1", count)
+}
+
+func freeConsecutiveTestPortsForHost(t *testing.T, host string, count int) []string {
+	t.Helper()
+	for range 100 {
+		base := 20000 + rand.Intn(20000)
+		listeners := make([]net.Listener, 0, count)
+		ports := make([]string, 0, count)
+		ok := true
+		for i := range count {
+			port := strconv.Itoa(base + i)
+			listener, err := net.Listen("tcp", net.JoinHostPort(host, port))
+			if err != nil {
+				ok = false
+				break
+			}
+			listeners = append(listeners, listener)
+			ports = append(ports, port)
+		}
+		for _, listener := range listeners {
+			listener.Close()
+		}
+		if ok {
+			return ports
+		}
+	}
+	t.Fatalf("could not find %d consecutive free ports", count)
+	return nil
+}
+
+type testRelay struct {
+	address     string
+	controlPort string
+	dataPorts   []string
+	allPorts    []string
+}
+
+func startTestRelay(t *testing.T, dataPorts int) testRelay {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	relay := startTestRelayWithContext(t, ctx, dataPorts)
+	t.Cleanup(cancel)
+	return relay
+}
+
+func startTestRelayWithContext(t *testing.T, ctx context.Context, dataPortCount int) testRelay {
+	t.Helper()
+	ports := freeConsecutiveTestPorts(t, dataPortCount+1)
+	controlPort := ports[0]
+	dataPorts := append([]string(nil), ports[1:]...)
+	var relayWG sync.WaitGroup
+	start := func(port string, banner ...string) {
+		relayWG.Go(func() {
+			_ = tcp.RunCtx(ctx, "warn", "127.0.0.1", port, "pass123", banner...)
+		})
+	}
+	start(controlPort, strings.Join(dataPorts, ","))
+	for _, port := range dataPorts {
+		start(port)
+	}
+	t.Cleanup(func() {
+		done := make(chan struct{})
+		go func() {
+			relayWG.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("test relay goroutines did not stop")
+		}
+	})
+	waitForRelayPorts(t, ports)
+	return testRelay{
+		address:     net.JoinHostPort("127.0.0.1", controlPort),
+		controlPort: controlPort,
+		dataPorts:   dataPorts,
+		allPorts:    append([]string(nil), ports...),
+	}
+}
+
+func waitForRelayPorts(t *testing.T, ports []string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for _, port := range ports {
+		address := net.JoinHostPort("127.0.0.1", port)
+		for {
+			conn, err := net.DialTimeout("tcp", address, 50*time.Millisecond)
+			if err == nil {
+				_ = conn.Close()
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("relay port %s did not become ready: %v", address, err)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
+func cancelClients(clients ...*Client) {
+	for _, client := range clients {
+		if client != nil && client.stop != nil {
+			client.stop.Cancel()
+		}
+	}
+}
+
+func waitForTransferResults(t *testing.T, results <-chan error, count int, timeout time.Duration, clients ...*Client) {
+	t.Helper()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	var firstErr error
+	completed := 0
+	for completed < count {
+		select {
+		case err := <-results:
+			completed++
+			if err != nil && firstErr == nil {
+				firstErr = err
+				cancelClients(clients...)
+			}
+		case <-timer.C:
+			cancelClients(clients...)
+			cleanupTimer := time.NewTimer(5 * time.Second)
+			for completed < count {
+				select {
+				case err := <-results:
+					completed++
+					if err != nil && firstErr == nil {
+						firstErr = err
+					}
+				case <-cleanupTimer.C:
+					t.Fatalf("transfer timed out and %d goroutines did not stop", count-completed)
+				}
+			}
+			cleanupTimer.Stop()
+			t.Fatalf("transfer timed out after %s", timeout)
+		}
+	}
+	if firstErr != nil {
+		t.Fatalf("transfer failed: %v", firstErr)
+	}
+}
+
+func cancelWhenTransferReady(sender, receiver *Client, cancel context.CancelFunc) func() {
+	ctx, stop := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+		timer := time.NewTimer(3 * time.Second)
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				return
+			case <-ticker.C:
+				if transferSetupComplete(sender, receiver) {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return func() {
+		stop()
+		<-done
+	}
+}
+
+func startReconnectRelay(t *testing.T) (controlPort string, cancel func()) {
+	t.Helper()
+	ctx, stop := context.WithCancel(context.Background())
+	relay := startTestRelayWithContext(t, ctx, 1)
+	return relay.controlPort, stop
+}
+
+func waitForReconnectCondition(timeout time.Duration, condition func() bool) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
+}
+
+func runReconnectDropTest(t *testing.T, connIndex int, disableReceiverReconnect bool) error {
+	t.Helper()
+	tempFile, cleanup := createTestFile(t, 2*1024*1024)
+	defer cleanup()
+	receivedFile := filepath.Base(tempFile)
+	defer os.Remove(receivedFile)
+
+	controlPort, stopRelay := startReconnectRelay(t)
+	defer stopRelay()
+
+	uniqueSecret := fmt.Sprintf("reconnect-%d-%d", time.Now().UnixNano(), rand.Intn(10000))
+	sender, err := newTestClient(Options{
+		IsSender:       true,
+		SharedSecret:   uniqueSecret,
+		Debug:          true,
+		RelayAddress:   "127.0.0.1:" + controlPort,
+		RelayPassword:  "pass123",
+		NoPrompt:       true,
+		DisableLocal:   true,
+		Curve:          "siec",
+		Overwrite:      true,
+		GitIgnore:      false,
+		NoCompress:     true,
+		NoMultiplexing: true,
+		ThrottleUpload: "512K",
+	})
+	if err != nil {
+		t.Fatalf("Create sender failed: %v", err)
+	}
+
+	filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{tempFile}, false, false, []string{})
+	if errGet != nil {
+		t.Fatalf("Get file info failed: %v", errGet)
+	}
+
+	receiver, err := newTestClient(Options{
+		IsSender:       false,
+		SharedSecret:   uniqueSecret,
+		Debug:          true,
+		RelayAddress:   "127.0.0.1:" + controlPort,
+		RelayPassword:  "pass123",
+		NoPrompt:       true,
+		DisableLocal:   true,
+		Curve:          "siec",
+		Overwrite:      true,
+		NoCompress:     true,
+		NoMultiplexing: true,
+	})
+	if err != nil {
+		t.Fatalf("Create receiver failed: %v", err)
+	}
+	if disableReceiverReconnect {
+		receiver.reconnectVersion = 0
+	}
+	deterministicReconnectRoom := sender.baseRoomName + "-reconnect-1"
+
+	errc := make(chan error, 2)
+	go func() {
+		errc <- sender.Send(filesInfo, emptyFolders, totalNumberFolders)
+	}()
+	go func() {
+		if err := waitHashed(sender); err != nil {
+			errc <- err
+			return
+		}
+		errc <- receiver.Receive()
+	}()
+
+	dropped := make(chan struct{})
+	go func() {
+		defer close(dropped)
+		ok := waitForReconnectCondition(5*time.Second, func() bool {
+			return sender.lifecycleSnapshot().FileTransferred && sender.connection(connIndex) != nil
+		})
+		if !ok {
+			return
+		}
+		time.Sleep(150 * time.Millisecond)
+		sender.connection(connIndex).Close()
+	}()
+
+	var firstErr error
+	for range 2 {
+		select {
+		case err := <-errc:
+			if err != nil && firstErr == nil {
+				firstErr = err
+			}
+		case <-time.After(20 * time.Second):
+			t.Fatal("reconnect transfer timed out")
+		}
+	}
+	<-dropped
+	if firstErr != nil {
+		return firstErr
+	}
+	assert.NotEqual(t, deterministicReconnectRoom, sender.Options.RoomName)
+	assert.NotEqual(t, sender.baseRoomName, sender.Options.RoomName)
+
+	original, err := os.ReadFile(tempFile)
+	if err != nil {
+		t.Fatalf("read original: %v", err)
+	}
+	received, err := os.ReadFile(receivedFile)
+	if err != nil {
+		t.Fatalf("read received: %v", err)
+	}
+	assert.Equal(t, original, received)
+	return nil
+}
+
+func TestGenerateReconnectRoom(t *testing.T) {
+	const baseRoom = "base-room"
+
+	first, err := generateReconnectRoom()
+	assert.NoError(t, err)
+	second, err := generateReconnectRoom()
+	assert.NoError(t, err)
+
+	assert.NotEmpty(t, first)
+	assert.NotEmpty(t, second)
+	assert.NotEqual(t, first, second)
+	assert.NotContains(t, first, baseRoom)
+	assert.NotContains(t, second, baseRoom)
+}
+
+func TestReconnectRetryEligibility(t *testing.T) {
+	c := &Client{
+		reconnectVersion:     ReconnectVersion,
+		peerReconnectVersion: ReconnectVersion,
+		nextReconnectRoom:    "next-room",
+		stop:                 newStop(context.Background()),
+	}
+	assert.True(t, c.canRetryTransfer(transferDisconnectError{err: fmt.Errorf("EOF")}, 0))
+	assert.False(t, c.canRetryTransfer(transferDisconnectError{err: fmt.Errorf("EOF")}, maxReconnectAttempts))
+	assert.False(t, c.canRetryTransfer(fmt.Errorf("local file error"), 0))
+	c.nextReconnectRoom = ""
+	assert.False(t, c.canRetryTransfer(transferDisconnectError{err: fmt.Errorf("EOF")}, 0))
+	c.nextReconnectRoom = "next-room"
+	c.peerReconnectVersion = 0
+	assert.False(t, c.canRetryTransfer(transferDisconnectError{err: fmt.Errorf("EOF")}, 0))
+}
+
+func TestRelayCapabilityFollowsCommittedRoute(t *testing.T) {
+	client := &Client{}
+	client.setRelayControlRoute("relay.example:9009", "public-capability", false)
+	address, capability := client.currentRelayControlRoute()
+	assert.Equal(t, "relay.example:9009", address)
+	assert.Equal(t, "public-capability", capability)
+	assert.False(t, client.relayControlRouteIsPeerToPeer(address))
+
+	client.setRelayControlRoute("127.0.0.1:9009", "", true)
+	address, capability = client.currentRelayControlRoute()
+	assert.Equal(t, "127.0.0.1:9009", address)
+	assert.Empty(t, capability)
+	assert.True(t, client.relayControlRouteIsPeerToPeer(address))
+	assert.False(t, client.relayControlRouteIsPeerToPeer("relay.example:9009"))
+}
+
+func TestReconnectFallsBackToRememberedRelay(t *testing.T) {
+	controlPort, stopRelay := startReconnectRelay(t)
+	defer stopRelay()
+	relayAddress := net.JoinHostPort("127.0.0.1", controlPort)
+	deadAddress := net.JoinHostPort("127.0.0.1", freeTestPort(t))
+	secret := fmt.Sprintf("fallback-%d", time.Now().UnixNano())
+	room := fmt.Sprintf("fallback-room-%d", time.Now().UnixNano())
+
+	sender, err := newTestClient(Options{
+		IsSender:       true,
+		SharedSecret:   secret,
+		Debug:          true,
+		RelayAddress:   relayAddress,
+		RelayPassword:  "pass123",
+		NoPrompt:       true,
+		DisableLocal:   true,
+		Curve:          "siec",
+		NoMultiplexing: true,
+	})
+	if err != nil {
+		t.Fatalf("create sender: %v", err)
+	}
+	receiver, err := newTestClient(Options{
+		IsSender:       false,
+		SharedSecret:   secret,
+		Debug:          true,
+		RelayAddress:   relayAddress,
+		RelayPassword:  "pass123",
+		NoPrompt:       true,
+		DisableLocal:   true,
+		Curve:          "siec",
+		NoMultiplexing: true,
+	})
+	if err != nil {
+		t.Fatalf("create receiver: %v", err)
+	}
+
+	for _, client := range []*Client{sender, receiver} {
+		client.nextReconnectRoom = room
+		client.setRelayControlRoute(deadAddress, "", false)
+		client.rememberReconnectRelayAddress(relayAddress)
+	}
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- sender.senderReconnectRelayAttempt(1)
+	}()
+	if err := receiver.receiverReconnectRelayAttempt(1); err != nil {
+		t.Fatalf("receiver reconnect: %v", err)
+	}
+	select {
+	case err := <-errc:
+		if err != nil {
+			t.Fatalf("sender reconnect: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("sender reconnect timed out")
+	}
+
+	assert.Equal(t, relayAddress, sender.relayControlAddress)
+	assert.Equal(t, relayAddress, receiver.relayControlAddress)
+	assert.Equal(t, relayAddress, sender.Options.RelayAddress)
+	assert.Equal(t, relayAddress, receiver.Options.RelayAddress)
+}
+
+func TestSenderWaitsPastAlternateRouteTimeoutAfterRouteIsReady(t *testing.T) {
+	c := &Client{
+		stop:                    newStop(context.Background()),
+		senderRouteReady:        make(chan struct{}),
+		senderRouteWaitOverride: 30 * time.Millisecond,
+	}
+	errchan := make(chan error, 1)
+	originalErr := fmt.Errorf("losing route EOF")
+
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		c.markSenderRouteReady()
+		time.Sleep(60 * time.Millisecond)
+		errchan <- nil
+	}()
+
+	start := time.Now()
+	err := c.waitForAlternateSenderRoute(errchan, originalErr)
+
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, time.Since(start), 50*time.Millisecond)
+}
+
+func TestReconnectResumesControlDrop(t *testing.T) {
+	err := runReconnectDropTest(t, 0, false)
+	assert.NoError(t, err)
+}
+
+func TestReconnectResumesDataDrop(t *testing.T) {
+	err := runReconnectDropTest(t, 1, false)
+	assert.NoError(t, err)
+}
+
+func TestReconnectDisabledPeerReturnsCleanError(t *testing.T) {
+	err := runReconnectDropTest(t, 1, true)
+	assert.Error(t, err)
+	assert.NotContains(t, fmt.Sprintf("%v", err), "panic")
+}
+
+func TestBase(t *testing.T) {
+	tempFile, cleanup := createTestFile(t, 1024*1024) // 1 МБ
+	defer cleanup()
+	receivedFile := filepath.Base(tempFile)
+	defer os.Remove(receivedFile)
+
+	relay := startTestRelay(t, 1)
+
+	uniqueSecret := fmt.Sprintf("test-%d-%d", time.Now().UnixNano(), rand.Intn(10000))
+
+	sender, err := newTestClient(Options{
+		IsSender:      true,
+		SharedSecret:  uniqueSecret,
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+		GitIgnore:     false,
+	})
+	if err != nil {
+		t.Fatalf("Create sender failed: %v", err)
+	}
+
+	filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{tempFile}, false, false, []string{})
+	if errGet != nil {
+		t.Fatalf("Get file info failed: %v", errGet)
+	}
+
+	receiver, err := newTestClient(Options{
+		IsSender:      false,
+		SharedSecret:  uniqueSecret,
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		t.Fatalf("Create receiver failed: %v", err)
+	}
+
+	fatalErr := make(chan error, 1)
+
+	failTest := func(err error) {
+		select {
+		case fatalErr <- err:
+		default:
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		log.Warn("Send")
+		if err := sender.Send(filesInfo, emptyFolders, totalNumberFolders); err != nil {
+			failTest(fmt.Errorf("Send failed: %w", err))
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		if err := waitHashed(sender); err != nil {
+			failTest(fmt.Errorf("waitHashed failed: %w", err))
+			return
+		}
+
+		log.Warn("Receive")
+		if err := receiver.Receive(); err != nil {
+			failTest(fmt.Errorf("Receive failed: %w", err))
+		}
+	}()
+
+	done := make(chan bool, 1)
+	go func() {
+		wg.Wait()
+		done <- true
+	}()
+
+	select {
+	case err := <-fatalErr:
+		cancelClients(sender, receiver)
+		wg.Wait()
+		t.Fatal(err)
+	case <-done:
+		select {
+		case err := <-fatalErr:
+			t.Fatal(err)
+		default:
+		}
+	case <-time.After(5 * time.Second):
+		cancelClients(sender, receiver)
+		wg.Wait()
+		t.Fatal("Test timeout after 5 seconds")
+	}
+}
+
+func TestCtx(t *testing.T) {
+	tempFile, cleanup := createTestFile(t, 1024*1024) // 1 МБ
+	defer cleanup()
+	receivedFile := filepath.Base(tempFile)
+	defer os.Remove(receivedFile)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	relay := startTestRelayWithContext(t, ctx, 1)
+
+	uniqueSecret := fmt.Sprintf("test-%d-%d", time.Now().UnixNano(), rand.Intn(10000))
+
+	sender, err := NewCtx(ctx, Options{
+		IsSender:      true,
+		SharedSecret:  uniqueSecret,
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		Transport:     TransportRelay,
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+		GitIgnore:     false,
+	})
+	if err != nil {
+		t.Fatalf("Create sender failed: %v", err)
+	}
+
+	filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{tempFile}, false, false, []string{})
+	if errGet != nil {
+		t.Fatalf("Get file info failed: %v", errGet)
+	}
+
+	receiver, err := NewCtx(ctx, Options{
+		IsSender:      false,
+		SharedSecret:  uniqueSecret,
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		t.Fatalf("Create receiver failed: %v", err)
+	}
+
+	fatalErr := make(chan error, 1)
+
+	failTest := func(err error) {
+		select {
+		case fatalErr <- err:
+		default:
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		log.Warn("Send")
+		if err := sender.Send(filesInfo, emptyFolders, totalNumberFolders); err != nil {
+			failTest(fmt.Errorf("Send failed: %w", err))
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		if err := waitHashed(sender); err != nil {
+			failTest(fmt.Errorf("waitHashed failed: %w", err))
+			return
+		}
+
+		log.Warn("Receive")
+		if err := receiver.Receive(); err != nil {
+			failTest(fmt.Errorf("Receive failed: %w", err))
+		}
+	}()
+
+	done := make(chan bool, 1)
+	go func() {
+		wg.Wait()
+		done <- true
+	}()
+
+	select {
+	case err := <-fatalErr:
+		cancel()
+		wg.Wait()
+		t.Fatal(err)
+	case <-done:
+		select {
+		case err := <-fatalErr:
+			t.Fatal(err)
+		default:
+		}
+	case <-time.After(5 * time.Second):
+		cancel()
+		wg.Wait()
+		t.Fatal("Test timeout after 5 seconds")
+	}
+}
+
+func validErrors(err error) bool {
+	s := err.Error()
+	return strings.Contains(s, "cancel") ||
+		strings.Contains(s, "context") ||
+		strings.Contains(s, "reset") ||
+		strings.Contains(s, "broken") ||
+		strings.Contains(s, "refusing") ||
+		strings.Contains(s, "EOF") ||
+		strings.Contains(s, "closed")
+}
+
+func result(t *testing.T, err error) {
+	if err != nil {
+		if validErrors(err) {
+			t.Logf("Expected error during context cancellation: %v", err)
+		} else {
+			t.Errorf("Unexpected error during cancellation: %v", err)
+		}
+		return
+	}
+	t.Error("Transfer should have been interrupted by context cancellation")
+}
+
+func TestAllCtx(t *testing.T) {
+	tempFile, cleanup := createTestFile(t, 1024*1024) // 1 МБ
+	defer cleanup()
+	receivedFile := filepath.Base(tempFile)
+	defer os.Remove(receivedFile)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	relay := startTestRelayWithContext(t, ctx, 1)
+
+	uniqueSecret := fmt.Sprintf("test-%d-%d", time.Now().UnixNano(), rand.Intn(10000))
+
+	sender, err := NewCtx(ctx, Options{
+		IsSender:       true,
+		SharedSecret:   uniqueSecret,
+		Debug:          true,
+		RelayAddress:   relay.address,
+		RelayPassword:  "pass123",
+		Transport:      TransportRelay,
+		Stdout:         false,
+		NoPrompt:       true,
+		DisableLocal:   true,
+		Curve:          "siec",
+		Overwrite:      true,
+		GitIgnore:      false,
+		ThrottleUpload: "512K",
+	})
+	if err != nil {
+		t.Fatalf("Create sender failed: %v", err)
+	}
+
+	filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{tempFile}, false, false, []string{})
+	if errGet != nil {
+		t.Fatalf("Get file info failed: %v", errGet)
+	}
+
+	receiver, err := NewCtx(ctx, Options{
+		IsSender:      false,
+		SharedSecret:  uniqueSecret,
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		t.Fatalf("Create receiver failed: %v", err)
+	}
+
+	fatalErr := make(chan error, 1)
+
+	failTest := func(err error) {
+		select {
+		case fatalErr <- err:
+		default:
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		log.Warn("Send")
+		if err := sender.Send(filesInfo, emptyFolders, totalNumberFolders); err != nil {
+			failTest(fmt.Errorf("Send failed: %w", err))
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		if err := waitHashed(sender); err != nil {
+			failTest(fmt.Errorf("waitHashed failed: %w", err))
+			return
+		}
+
+		log.Warn("Receive")
+		if err := receiver.Receive(); err != nil {
+			failTest(fmt.Errorf("Receive failed: %w", err))
+		}
+	}()
+
+	stopSetupMonitor := cancelWhenTransferReady(sender, receiver, cancel)
+	defer stopSetupMonitor()
+
+	done := make(chan bool, 1)
+	go func() {
+		wg.Wait()
+		done <- true
+	}()
+
+	select {
+	case err := <-fatalErr:
+		cancel()
+		wg.Wait()
+		result(t, err)
+	case <-done:
+		select {
+		case err := <-fatalErr:
+			result(t, err)
+		default:
+			t.Error("Transfer should have been interrupted by context cancellation")
+		}
+	case <-time.After(5 * time.Second):
+		cancel()
+		wg.Wait()
+		t.Fatal("Test timeout after 5 seconds")
+	}
+}
+
+func TestSendCtx(t *testing.T) {
+	tempFile, cleanup := createTestFile(t, 1024*1024) // 1 МБ
+	defer cleanup()
+	receivedFile := filepath.Base(tempFile)
+	defer os.Remove(receivedFile)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+
+	relay := startTestRelayWithContext(t, ctx, 1)
+
+	uniqueSecret := fmt.Sprintf("test-%d-%d", time.Now().UnixNano(), rand.Intn(10000))
+
+	sender, err := NewCtx(ctx2, Options{
+		IsSender:       true,
+		SharedSecret:   uniqueSecret,
+		Debug:          true,
+		RelayAddress:   relay.address,
+		RelayPassword:  "pass123",
+		Transport:      TransportRelay,
+		Stdout:         false,
+		NoPrompt:       true,
+		DisableLocal:   true,
+		Curve:          "siec",
+		Overwrite:      true,
+		GitIgnore:      false,
+		ThrottleUpload: "512K",
+	})
+	if err != nil {
+		t.Fatalf("Create sender failed: %v", err)
+	}
+
+	filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{tempFile}, false, false, []string{})
+	if errGet != nil {
+		t.Fatalf("Get file info failed: %v", errGet)
+	}
+
+	receiver, err := NewCtx(ctx, Options{
+		IsSender:      false,
+		SharedSecret:  uniqueSecret,
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		t.Fatalf("Create receiver failed: %v", err)
+	}
+
+	fatalErr := make(chan error, 1)
+
+	failTest := func(err error) {
+		select {
+		case fatalErr <- err:
+		default:
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		log.Warn("Send")
+		if err := sender.Send(filesInfo, emptyFolders, totalNumberFolders); err != nil {
+			failTest(fmt.Errorf("Send failed: %w", err))
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		if err := waitHashed(sender); err != nil {
+			failTest(fmt.Errorf("waitHashed failed: %w", err))
+			return
+		}
+
+		log.Warn("Receive")
+		if err := receiver.Receive(); err != nil {
+			failTest(fmt.Errorf("Receive failed: %w", err))
+		}
+	}()
+
+	stopSetupMonitor := cancelWhenTransferReady(sender, receiver, cancel2)
+	defer stopSetupMonitor()
+
+	done := make(chan bool, 1)
+	go func() {
+		wg.Wait()
+		done <- true
+	}()
+
+	select {
+	case err := <-fatalErr:
+		cancel()
+		cancel2()
+		wg.Wait()
+		result(t, err)
+	case <-done:
+		select {
+		case err := <-fatalErr:
+			result(t, err)
+		default:
+			t.Error("Transfer should have been interrupted by context cancellation")
+		}
+	case <-time.After(5 * time.Second):
+		cancel()
+		cancel2()
+		wg.Wait()
+		t.Fatal("Test timeout after 5 seconds")
+	}
+}
+
+func TestReceiveCtx(t *testing.T) {
+	tempFile, cleanup := createTestFile(t, 1024*1024) // 1 МБ
+	defer cleanup()
+	receivedFile := filepath.Base(tempFile)
+	defer os.Remove(receivedFile)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+
+	relay := startTestRelayWithContext(t, ctx, 1)
+
+	uniqueSecret := fmt.Sprintf("test-%d-%d", time.Now().UnixNano(), rand.Intn(10000))
+
+	sender, err := NewCtx(ctx, Options{
+		IsSender:       true,
+		SharedSecret:   uniqueSecret,
+		Debug:          true,
+		RelayAddress:   relay.address,
+		RelayPassword:  "pass123",
+		Transport:      TransportRelay,
+		Stdout:         false,
+		NoPrompt:       true,
+		DisableLocal:   true,
+		Curve:          "siec",
+		Overwrite:      true,
+		GitIgnore:      false,
+		ThrottleUpload: "512K",
+	})
+	if err != nil {
+		t.Fatalf("Create sender failed: %v", err)
+	}
+
+	filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{tempFile}, false, false, []string{})
+	if errGet != nil {
+		t.Fatalf("Get file info failed: %v", errGet)
+	}
+
+	receiver, err := NewCtx(ctx2, Options{
+		IsSender:      false,
+		SharedSecret:  uniqueSecret,
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		t.Fatalf("Create receiver failed: %v", err)
+	}
+
+	fatalErr := make(chan error, 1)
+
+	failTest := func(err error) {
+		select {
+		case fatalErr <- err:
+		default:
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		log.Warn("Send")
+		if err := sender.Send(filesInfo, emptyFolders, totalNumberFolders); err != nil {
+			failTest(fmt.Errorf("Send failed: %w", err))
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		if err := waitHashed(sender); err != nil {
+			failTest(fmt.Errorf("waitHashed failed: %w", err))
+			return
+		}
+
+		log.Warn("Receive")
+		if err := receiver.Receive(); err != nil {
+			failTest(fmt.Errorf("Receive failed: %w", err))
+		}
+	}()
+
+	stopSetupMonitor := cancelWhenTransferReady(sender, receiver, cancel2)
+	defer stopSetupMonitor()
+
+	done := make(chan bool, 1)
+	go func() {
+		wg.Wait()
+		done <- true
+	}()
+
+	select {
+	case err := <-fatalErr:
+		cancel()
+		cancel2()
+		wg.Wait()
+		result(t, err)
+	case <-done:
+		select {
+		case err := <-fatalErr:
+			result(t, err)
+		default:
+			t.Error("Transfer should have been interrupted by context cancellation")
+		}
+	case <-time.After(5 * time.Second):
+		cancel()
+		cancel2()
+		wg.Wait()
+		t.Fatal("Test timeout after 5 seconds")
+	}
+}
+
+func TestRunCtx(t *testing.T) {
+	tempFile, cleanup := createTestFile(t, 1024*1024) // 1 МБ
+	defer cleanup()
+	receivedFile := filepath.Base(tempFile)
+	defer os.Remove(receivedFile)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+
+	relay := startTestRelayWithContext(t, ctx2, 1)
+
+	uniqueSecret := fmt.Sprintf("test-%d-%d", time.Now().UnixNano(), rand.Intn(10000))
+
+	sender, err := NewCtx(ctx, Options{
+		IsSender:       true,
+		SharedSecret:   uniqueSecret,
+		Debug:          true,
+		RelayAddress:   relay.address,
+		RelayPassword:  "pass123",
+		Transport:      TransportRelay,
+		Stdout:         false,
+		NoPrompt:       true,
+		DisableLocal:   true,
+		Curve:          "siec",
+		Overwrite:      true,
+		GitIgnore:      false,
+		ThrottleUpload: "512K",
+	})
+	if err != nil {
+		t.Fatalf("Create sender failed: %v", err)
+	}
+
+	filesInfo, emptyFolders, totalNumberFolders, errGet := GetFilesInfo([]string{tempFile}, false, false, []string{})
+	if errGet != nil {
+		t.Fatalf("Get file info failed: %v", errGet)
+	}
+
+	receiver, err := NewCtx(ctx, Options{
+		IsSender:      false,
+		SharedSecret:  uniqueSecret,
+		Debug:         true,
+		RelayAddress:  relay.address,
+		RelayPassword: "pass123",
+		Stdout:        false,
+		NoPrompt:      true,
+		DisableLocal:  true,
+		Curve:         "siec",
+		Overwrite:     true,
+	})
+	if err != nil {
+		t.Fatalf("Create receiver failed: %v", err)
+	}
+
+	fatalErr := make(chan error, 1)
+
+	failTest := func(err error) {
+		select {
+		case fatalErr <- err:
+		default:
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		log.Warn("Send")
+		if err := sender.Send(filesInfo, emptyFolders, totalNumberFolders); err != nil {
+			failTest(fmt.Errorf("Send failed: %w", err))
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		if err := waitHashed(sender); err != nil {
+			failTest(fmt.Errorf("waitHashed failed: %w", err))
+			return
+		}
+
+		log.Warn("Receive")
+		if err := receiver.Receive(); err != nil {
+			failTest(fmt.Errorf("Receive failed: %w", err))
+		}
+	}()
+
+	stopSetupMonitor := cancelWhenTransferReady(sender, receiver, cancel2)
+	defer stopSetupMonitor()
+
+	done := make(chan bool, 1)
+	go func() {
+		wg.Wait()
+		done <- true
+	}()
+
+	select {
+	case err := <-fatalErr:
+		cancel()
+		cancel2()
+		wg.Wait()
+		result(t, err)
+	case <-done:
+		select {
+		case err := <-fatalErr:
+			result(t, err)
+		default:
+			t.Error("Transfer should have been interrupted by context cancellation")
+		}
+	case <-time.After(5 * time.Second):
+		cancel()
+		cancel2()
+		wg.Wait()
+		t.Fatal("Test timeout after 5 seconds")
+	}
+}

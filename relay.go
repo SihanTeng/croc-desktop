@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/schollz/croc/v10/src/models"
-	"github.com/schollz/croc/v10/src/tcp"
+	"github.com/schollz/croc/v11/src/models"
+	"github.com/schollz/croc/v11/src/tcp"
 )
 
 const eventRelayState = "relay:state"

@@ -14,10 +14,11 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
-	"github.com/schollz/croc/v10/src/croc"
-	"github.com/schollz/croc/v10/src/models"
-	"github.com/schollz/croc/v10/src/tcp"
+	"github.com/schollz/croc/v11/src/croc"
+	"github.com/schollz/croc/v11/src/models"
+	"github.com/schollz/croc/v11/src/tcp"
 )
 
 func main() {
@@ -150,7 +151,7 @@ func cmdRelay(args []string) {
 			banners = append(banners, banner)
 		}
 		go func(p string, b ...string) {
-			fmt.Fprintf(os.Stderr, "relay port %s exited: %v\n", p, tcp.RunCtx(ctx, "error", "", p, *pass, b...))
+			fmt.Fprintf(os.Stderr, "relay port %s exited: %v\n", p, tcp.RunWithOptionsAsync("127.0.0.1", p, *pass, tcp.WithCtx(ctx), tcp.WithLogLevel("error"), tcp.WithBanner(b...), tcp.WithAdmissionLimits(10000, 10000, time.Minute)))
 		}(port, banners...)
 	}
 	fmt.Println("RELAY READY")

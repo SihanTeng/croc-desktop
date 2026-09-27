@@ -24,9 +24,14 @@ export default function CodeDisplay({ code }: { code: string }) {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  // for recipients on the croc CLI
+  // Match the local OS. Unix v11 CLI requires CROC_SECRET instead of a
+  // positional code; Windows still accepts positional codes.
   const copyCommand = async () => {
-    await copyToClipboard(`croc ${code}`);
+    const quoted = "'" + code.replace(/'/g, "'\\''") + "'";
+    const command = /Windows/i.test(navigator.userAgent)
+      ? `croc ${code}`
+      : `CROC_SECRET=${quoted} croc`;
+    await copyToClipboard(command);
     setCopiedCmd(true);
     setTimeout(() => setCopiedCmd(false), 1500);
   };

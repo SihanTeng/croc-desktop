@@ -3,10 +3,11 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 # The git tag is the single source of truth for the version. The Taskfiles
 # inject it into the binary (-X main.AppVersion) and the macOS bundle plist;
@@ -27,17 +28,17 @@ jobs:
             name: linux-amd64
             platform: linux/amd64
             bin: croc-desktop
-            artifact: croc-desktop_${{ github.ref_name }}_linux-amd64.AppImage
+            artifact: croc-desktop_${{ github.ref_type == 'tag' && github.ref_name || github.sha }}_linux-amd64.AppImage
           - os: macos-latest
             name: darwin-arm64
             platform: darwin/arm64
             bin: croc-desktop
-            artifact: croc-desktop_${{ github.ref_name }}_darwin-arm64.dmg
+            artifact: croc-desktop_${{ github.ref_type == 'tag' && github.ref_name || github.sha }}_darwin-arm64.dmg
           - os: windows-latest
             name: windows-amd64
             platform: windows/amd64
             bin: croc-desktop.exe
-            artifact: croc-desktop_${{ github.ref_name }}_windows-amd64.msi
+            artifact: croc-desktop_${{ github.ref_type == 'tag' && github.ref_name || github.sha }}_windows-amd64.msi
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -47,7 +48,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.27.1"
 
       - uses: actions/setup-node@v4
         with:
@@ -160,10 +161,29 @@ jobs:
 
       # ---------- publish ----------
 
+      - name: Save validated package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish tagged release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifact }}
+          files: release/**/*
           fail_on_unmatched_files: true
           generate_release_notes: true
           body: |
@@ -172,7 +192,7 @@ jobs:
             | Platform | File |
             | --- | --- |
             | Linux (AppImage) | `croc-desktop_${{ github.ref_name }}_linux-amd64.AppImage` |
-            | macOS (Apple Silicon) | `croc-desktop_${{ github.ref_name }}_darwin-arm64.dmg` |
+            | macOS 13+ (Apple Silicon) | `croc-desktop_${{ github.ref_name }}_darwin-arm64.dmg` |
             | Windows (MSI) | `croc-desktop_${{ github.ref_name }}_windows-amd64.msi` |
 
   # Pushes the freshly built DMG's version+sha256 into SihanTeng/homebrew-tap.
@@ -181,7 +201,7 @@ jobs:
   # moment the secret exists (fine-grained PAT, contents:write on the tap).
   publish-homebrew:
     name: Publish Homebrew cask
-    needs: build
+    needs: [build, publish-release]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     env:

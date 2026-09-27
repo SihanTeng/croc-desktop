@@ -64,7 +64,7 @@ const previewStub: Partial<WailsApp> = {
   GetAppInfo: () =>
     Promise.resolve({
       version: "0.2.0",
-      crocVersion: "v10.5.0",
+      crocVersion: "preview",
       defaultRelay: "croc.schollz.com",
       defaultRelay6: "croc6.schollz.com",
     }),

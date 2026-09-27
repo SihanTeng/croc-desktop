@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -8,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/schollz/croc/v10/src/comm"
-	"github.com/schollz/croc/v10/src/croc"
-	"github.com/schollz/croc/v10/src/models"
-	"github.com/schollz/croc/v10/src/utils"
+	"github.com/schollz/croc/v11/src/comm"
+	"github.com/schollz/croc/v11/src/croc"
+	"github.com/schollz/croc/v11/src/models"
+	"github.com/schollz/croc/v11/src/utils"
 )
 
 // SavedCode is a remembered receive code (favorite), managed from the
@@ -109,11 +110,10 @@ func saveSettings(s Settings) error {
 	return os.WriteFile(f, b, 0o644)
 }
 
-// applyProxySettings wires the proxy settings into croc's comm package, which
-// (like the CLI) reads them from package-level variables.
-func applyProxySettings(s Settings) {
-	comm.Socks5Proxy = s.Socks5
-	comm.HttpProxy = s.HttpProxy
+// withProxySettings freezes routing for this transfer, including lingering
+// cancelled dialers. Never mutate croc's CLI-oriented process-wide globals.
+func withProxySettings(ctx context.Context, s Settings) context.Context {
+	return comm.WithProxy(ctx, s.Socks5, s.HttpProxy)
 }
 
 // throttleRe matches croc's upload-limit syntax: a number with an optional
@@ -157,6 +157,8 @@ func buildCrocOptions(s Settings, isSender bool) croc.Options {
 		IP:               s.IP,
 		NoPrompt:         true,
 		DisableClipboard: true,
+		// Preserve desktop relay/proxy routing instead of starting Tailcat/DERP.
+		DisableTailcat: true,
 	}
 	if validThrottle(s.ThrottleUpload) {
 		opts.ThrottleUpload = s.ThrottleUpload

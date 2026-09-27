@@ -1,0 +1,4 @@
+# Keep the checksum-pinned upstream snapshot intact and collapsed in PR diffs.
+third_party/croc/** linguist-vendored -whitespace
+# Unified diffs intentionally contain context lines with a leading space.
+patches/*.patch -whitespace

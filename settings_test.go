@@ -1,13 +1,15 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
-	"github.com/schollz/croc/v10/src/comm"
-	"github.com/schollz/croc/v10/src/models"
+	"github.com/schollz/croc/v11/src/comm"
+	"github.com/schollz/croc/v11/src/models"
 )
 
 func TestSettingsRoundTrip(t *testing.T) {
@@ -93,19 +95,21 @@ func TestBuildCrocOptions(t *testing.T) {
 	}
 }
 
-func TestApplyProxySettings(t *testing.T) {
+func TestProxySettingsBelongToTransfer(t *testing.T) {
 	oldSocks, oldHTTP := comm.Socks5Proxy, comm.HttpProxy
-	defer func() { comm.Socks5Proxy, comm.HttpProxy = oldSocks, oldHTTP }()
-
-	applyProxySettings(Settings{Socks5: "localhost:1080", HttpProxy: "http://localhost:8080"})
-	if comm.Socks5Proxy != "localhost:1080" || comm.HttpProxy != "http://localhost:8080" {
-		t.Fatalf("proxies not applied: %q / %q", comm.Socks5Proxy, comm.HttpProxy)
+	ctx := withProxySettings(context.Background(), Settings{Socks5: "first-transfer://proxy"})
+	other := withProxySettings(context.Background(), Settings{Socks5: "second-transfer://proxy"})
+	for _, tc := range []struct {
+		ctx    context.Context
+		scheme string
+	}{{ctx, "first-transfer"}, {other, "second-transfer"}, {ctx, "first-transfer"}} {
+		_, err := comm.NewConnectionContext(tc.ctx, "unresolvable.invalid:9009")
+		if err == nil || !strings.Contains(err.Error(), tc.scheme) {
+			t.Fatalf("wrong proxy selected: %v", err)
+		}
 	}
-
-	// clearing settings clears the globals too
-	applyProxySettings(Settings{})
-	if comm.Socks5Proxy != "" || comm.HttpProxy != "" {
-		t.Fatalf("proxies not cleared: %q / %q", comm.Socks5Proxy, comm.HttpProxy)
+	if comm.Socks5Proxy != oldSocks || comm.HttpProxy != oldHTTP {
+		t.Fatal("per-transfer settings changed process-wide routing")
 	}
 }
 
